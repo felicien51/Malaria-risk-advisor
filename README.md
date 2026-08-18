@@ -1,5 +1,7 @@
 # Malaria Risk Advisor
 
+**Live demo:** https://malaria-risk-advisor.vercel.app/
+
 A React application that estimates weather-driven malaria transmission risk
 for any of Kenya's 47 counties, using live rainfall, humidity and temperature
 data. Built as Phase 1 of a 3-phase capstone (React frontend → Flask +

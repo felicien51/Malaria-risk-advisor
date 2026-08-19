@@ -28,7 +28,7 @@ weather data themselves.
 ## Setup instructions
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/felicien51/Malaria-risk-advisor.git
 cd malaria-risk-advisor
 npm install
 npm run dev

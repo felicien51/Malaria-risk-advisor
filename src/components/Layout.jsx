@@ -24,9 +24,7 @@ export default function Layout() {
             <NavLink to="/compare" className={({ isActive }) => (isActive ? "active" : "")}>
               {t("navCompare")}
             </NavLink>
-            <NavLink to="/map" className={({ isActive }) => (isActive ? "active" : "")}>
-              {t("navMap")}
-            </NavLink>
+            
             <NavLink to="/about" className={({ isActive }) => (isActive ? "active" : "")}>
               {t("navAbout")}
             </NavLink>

@@ -1,11 +1,11 @@
 # Malaria Risk Advisor
 
-**Live demo:** https://malaria-risk-advisor.vercel.app/
-
 A React application that estimates weather-driven malaria transmission risk
 for any of Kenya's 47 counties, using live rainfall, humidity and temperature
 data. Built as Phase 1 of a 3-phase capstone (React frontend → Flask +
 PostgreSQL backend → authentication).
+
+**Live demo:** https://malaria-risk-advisor.vercel.app/
 
 ## Problem
 
@@ -18,17 +18,32 @@ weather data themselves.
 
 ## Live features
 
-- Search/browse all 47 Kenyan counties
+- Search/browse all 47 Kenyan counties, with a "recently viewed" quick list
 - A 0-100 risk score (Low / Moderate / High) computed from the trailing
   14 days of weather, with a visible breakdown of what drove the score
 - A 16-day forward forecast (rainfall + temperature) with a 7/16-day toggle
+- **Compare view** — put up to 3 counties side by side
+- **Kenya risk map** — all 47 counties plotted and colored by current risk
+  (approximate positions by coordinate, not official GIS county boundaries)
+- **Session risk history** — a small sparkline showing how a county's score
+  moved during your visit (resets on reload, not persisted — that's Phase 2)
+- **Shareable link** — copy a direct link to a county's dashboard
+- **Downloadable risk card** — exports a PNG summary card via the Canvas API
+- **Optional high-risk browser notifications** — opt in per county; requires
+  browser permission and the tab to stay open (no push server yet)
+- **Dark/light theme** and **metric/imperial units**, both persisted locally
+- **English/Swahili** toggle for the app's navigation and key headings
+  (scoped to UI chrome, not a full translation of every dynamic string)
 - A methodology page explaining exactly how the score is calculated
 - Loading, error (with retry), and empty states throughout
+- Accessibility basics: skip-to-content link, aria-live regions for
+  loading/copy states, aria-labels on icon-only buttons, keyboard-focusable
+  controls
 
 ## Setup instructions
 
 ```bash
-git clone https://github.com/felicien51/Malaria-risk-advisor.git
+git clone <your-repo-url>
 cd malaria-risk-advisor
 npm install
 npm run dev
@@ -57,7 +72,11 @@ Parameters used:
 - `daily` - `temperature_2m_max`, `temperature_2m_min`, `precipitation_sum`,
   `relative_humidity_2m_mean`, `wind_speed_10m_max`
 - `past_days=14` - trailing window used for the risk score
-- `forecast_days=16` - forward outlook
+- `forecast_days=16` - forward outlook (`forecast_days=1` on the map view,
+  which only needs the current score per county, not a full forecast)
+
+The map view fetches all 47 counties in small batches of 8 concurrent
+requests rather than all at once, to be polite to the API.
 
 ## Risk-scoring logic
 
@@ -75,10 +94,12 @@ See `src/utils/riskScore.js` for the exact calculation.
 
 ```
 src/
-  components/   RiskGauge, ForecastChart, Layout
-  pages/        Home, Dashboard, Forecast, About
-  hooks/        useWeatherData (fetch + loading/error state)
-  utils/        riskScore.js (scoring logic)
+  components/   RiskGauge, ForecastChart, Layout, Sparkline
+  pages/        Home, Dashboard, Forecast, Compare, MapView, About
+  hooks/        useWeatherData, useRecentCounties, useSessionRiskLog,
+                useRiskNotifications, useAllCountiesRisk
+  context/      PreferencesContext (theme/units), LanguageContext (en/sw)
+  utils/        riskScore.js (scoring logic), downloadCard.js (PNG export)
   data/         counties.js (47 counties with coordinates)
 ```
 
@@ -89,14 +110,23 @@ src/
 - The risk-scoring thresholds are a simplified educational heuristic based
   on documented environmental drivers of transmission, not a clinical or
   epidemiological model, and should not be used for medical decisions
-- No persistence yet - selections reset on refresh (planned for Phase 2,
-  which adds a Flask + PostgreSQL backend to save watchlists and risk
-  history per user)
+- The Kenya risk map plots counties by coordinate, not real GIS county
+  border shapes — there was no offline Kenya county GeoJSON available
+- Browser notifications only fire while the tab is open (no service worker
+  or push server) — a genuinely reliable alert system needs a Phase 2/3
+  backend
+- Swahili translation covers navigation and key headings only, not every
+  dynamic string
+- No cross-session persistence yet — recently viewed counties and unit/theme
+  preferences use localStorage, but saved watchlists and risk history don't
+  survive a full data reset (planned properly for Phase 2 with a real
+  backend + database)
 - No user accounts yet (planned for Phase 3)
 
 ## Roadmap (Phases 2 and 3)
 
 - **Phase 2:** Flask + PostgreSQL backend proxying Open-Meteo, persisting
-  saved counties and historical risk scores
+  saved counties and historical risk scores, and a real push-notification
+  service
 - **Phase 3:** Authentication so each user has their own saved counties,
   alert preferences, and risk history

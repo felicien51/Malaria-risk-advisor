@@ -1,10 +1,12 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { COUNTIES } from "../data/counties";
+import { useRecentCounties } from "../hooks/useRecentCounties";
 
 export default function Home() {
   const [query, setQuery] = useState("");
   const navigate = useNavigate();
+  const { recent } = useRecentCounties();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -34,6 +36,20 @@ export default function Home() {
           />
         </div>
       </section>
+
+      {recent.length > 0 && (
+        <div className="recent-chips">
+          {recent.map((name) => (
+            <button
+              key={name}
+              className="recent-chip"
+              onClick={() => navigate(`/county/${encodeURIComponent(name)}`)}
+            >
+              ↻ {name}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="county-grid">
         {filtered.map((county) => (

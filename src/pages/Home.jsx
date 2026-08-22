@@ -2,11 +2,13 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { COUNTIES } from "../data/counties";
 import { useRecentCounties } from "../hooks/useRecentCounties";
+import { useLanguage } from "../context/LanguageContext.jsx";
 
 export default function Home() {
   const [query, setQuery] = useState("");
   const navigate = useNavigate();
   const { recent } = useRecentCounties();
+  const { t } = useLanguage();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -19,20 +21,17 @@ export default function Home() {
   return (
     <div>
       <section className="hero">
-        <p className="hero-eyebrow">Weather-driven public health tool</p>
-        <h1>Malaria risk, read from the sky.</h1>
-        <p>
-          Rainfall, humidity and temperature drive mosquito breeding conditions.
-          Pick a county to see today&apos;s estimated risk and a 16-day outlook.
-        </p>
+        <p className="hero-eyebrow">{t("heroEyebrow")}</p>
+        <h1>{t("heroTitle")}</h1>
+        <p>{t("heroBody")}</p>
         <div className="search-box">
           <span className="search-icon">⌕</span>
           <input
             type="text"
-            placeholder="Search a county or region"
+            placeholder={t("searchPlaceholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search counties"
+            aria-label={t("searchPlaceholder")}
           />
         </div>
       </section>
@@ -65,11 +64,11 @@ export default function Home() {
       </div>
 
       {filtered.length === 0 && (
-        <p className="county-count">No counties match &quot;{query}&quot;</p>
+        <p className="county-count">{t("noMatch", { query })}</p>
       )}
       {filtered.length > 0 && (
         <p className="county-count">
-          {filtered.length} of {COUNTIES.length} counties
+          {t("countyCount", { count: filtered.length, total: COUNTIES.length })}
         </p>
       )}
     </div>

@@ -2,12 +2,14 @@ import { useState } from "react";
 import { COUNTIES } from "../data/counties";
 import { useWeatherData } from "../hooks/useWeatherData";
 import { splitDaily, computeRiskScore } from "../utils/riskScore";
+import { useLanguage } from "../context/LanguageContext.jsx";
 import RiskGauge from "../components/RiskGauge";
 
 const MAX_COMPARE = 3;
 
 export default function Compare() {
   const [selected, setSelected] = useState([]);
+  const { t } = useLanguage();
 
   const toggleCounty = (name) => {
     setSelected((prev) => {
@@ -23,9 +25,9 @@ export default function Compare() {
         <div className="icon-badge">⚖️</div>
         <div>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.4rem", margin: 0 }}>
-            Compare counties
+            {t("compareTitle")}
           </h2>
-          <p className="subtitle">Pick up to {MAX_COMPARE} to compare side by side</p>
+          <p className="subtitle">{t("comparePick", { count: MAX_COMPARE })}</p>
         </div>
       </div>
 
@@ -44,19 +46,19 @@ export default function Compare() {
       </div>
 
       {selected.length === 0 && (
-        <p className="county-count">Select a county above to get started</p>
+        <p className="county-count">{t("compareSelect")}</p>
       )}
 
       <div className="compare-grid">
         {selected.map((name) => (
-          <CompareCard key={name} countyName={name} />
+          <CompareCard key={name} countyName={name} t={t} />
         ))}
       </div>
     </div>
   );
 }
 
-function CompareCard({ countyName }) {
+function CompareCard({ countyName, t }) {
   const county = COUNTIES.find((c) => c.name === countyName);
   const { data, status } = useWeatherData(county);
 
@@ -70,7 +72,7 @@ function CompareCard({ countyName }) {
           <div className="spinner" />
         </div>
       )}
-      {status === "error" && <p style={{ fontSize: "0.85rem", color: "rgba(var(--paper-rgb),0.6)" }}>Couldn&apos;t load data.</p>}
+      {status === "error" && <p style={{ fontSize: "0.85rem", color: "rgba(var(--paper-rgb),0.6)" }}>{t("couldNotLoadData")}</p>}
       {status === "success" && data && (
         <RiskGauge score={computeRiskScore(splitDaily(data).trailing).score} level={computeRiskScore(splitDaily(data).trailing).level} />
       )}

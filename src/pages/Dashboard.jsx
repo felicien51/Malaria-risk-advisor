@@ -7,12 +7,11 @@ import { useRecentCounties } from "../hooks/useRecentCounties";
 import { useSessionRiskLog } from "../hooks/useSessionRiskLog";
 import { useRiskNotifications } from "../hooks/useRiskNotifications";
 import { usePreferences, formatTemp, formatRainfall } from "../context/PreferencesContext.jsx";
+import { useLanguage } from "../context/LanguageContext.jsx";
 import { downloadRiskCard } from "../utils/downloadCard";
 import RiskGauge from "../components/RiskGauge";
 import ForecastChart from "../components/ForecastChart";
 import Sparkline from "../components/Sparkline";
-
-const TREND_LABEL = { rising: "Rising", falling: "Falling", steady: "Steady" };
 
 export default function Dashboard() {
   const { countyName } = useParams();
@@ -21,6 +20,7 @@ export default function Dashboard() {
   const { data, status, error } = useWeatherData(county);
   const { addRecent } = useRecentCounties();
   const [copied, setCopied] = useState(false);
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (county) addRecent(county.name);
@@ -36,9 +36,9 @@ export default function Dashboard() {
   if (!county) {
     return (
       <div className="state-box">
-        <p>County not found.</p>
+        <p>{t("countyNotFound")}</p>
         <button className="retry-btn" onClick={() => navigate("/")}>
-          Back to county list
+          {t("backToList")}
         </button>
       </div>
     );
@@ -47,20 +47,20 @@ export default function Dashboard() {
   return (
     <div>
       <button className="back-link" onClick={() => navigate("/")}>
-        &larr; Change county
+        &larr; {t("changeCounty")}
       </button>
 
       <div className="dash-header">
         <div className="dash-title">
           <div className="icon-badge" aria-hidden="true">🩺</div>
           <div>
-            <h2>Malaria risk advisor</h2>
+            <h2>{t("dashTitle")}</h2>
             <p className="subtitle">{county.name} county</p>
           </div>
         </div>
         <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
-          <button className="icon-btn" onClick={handleShare} aria-label="Copy shareable link">
-            🔗 Share
+          <button className="icon-btn" onClick={handleShare} aria-label={t("share")}>
+            🔗 {t("share")}
           </button>
           <select
             className="county-select"
@@ -78,33 +78,33 @@ export default function Dashboard() {
       </div>
 
       <div role="status" aria-live="polite">
-        {copied && <div className="copy-toast">Link copied to clipboard</div>}
+        {copied && <div className="copy-toast">{t("linkCopied")}</div>}
       </div>
 
       {status === "loading" && (
         <div className="state-box" role="status" aria-live="polite">
           <div className="spinner" aria-hidden="true" />
-          <p>Fetching weather data for {county.name}&hellip;</p>
+          <p>{t("fetching", { county: county.name })}</p>
         </div>
       )}
 
       {status === "error" && (
         <div className="state-box" role="alert">
-          <p>Couldn&apos;t load weather data{error ? `: ${error}` : "."}</p>
+          <p>{t("errorLoad")}{error ? `: ${error}` : "."}</p>
           <button className="retry-btn" onClick={() => window.location.reload()}>
-            Retry
+            {t("retry")}
           </button>
         </div>
       )}
 
       {status === "success" && data && (
-        <DashboardContent data={data} countyName={county.name} navigate={navigate} />
+        <DashboardContent data={data} countyName={county.name} navigate={navigate} t={t} />
       )}
     </div>
   );
 }
 
-function DashboardContent({ data, countyName, navigate }) {
+function DashboardContent({ data, countyName, navigate, t }) {
   const { trailing, forecast } = splitDaily(data);
   const risk = computeRiskScore(trailing);
   const trend = computeTrend(trailing);
@@ -112,6 +112,8 @@ function DashboardContent({ data, countyName, navigate }) {
   const { history, record } = useSessionRiskLog(countyName);
   const { enabled: notifyEnabled, permission, toggle: toggleNotify, checkAndNotify } =
     useRiskNotifications(countyName);
+
+  const TREND_LABEL = { rising: t("trendRising"), falling: t("trendFalling"), steady: t("trendSteady") };
 
   useEffect(() => {
     record(risk.score);
@@ -136,19 +138,19 @@ function DashboardContent({ data, countyName, navigate }) {
         <RiskGauge score={risk.score} level={risk.level} />
         <div className="stat-grid">
           <div className="stat-card">
-            <div className="label">💧 Rainfall, 14d</div>
+            <div className="label">💧 {t("rainfall14d")}</div>
             <div className="value">{formatRainfall(risk.totalRainfall, units)}</div>
           </div>
           <div className="stat-card">
-            <div className="label">🌫️ Avg humidity</div>
+            <div className="label">🌫️ {t("avgHumidity")}</div>
             <div className="value">{risk.avgHumidity}%</div>
           </div>
           <div className="stat-card">
-            <div className="label">🌡️ Avg temp</div>
+            <div className="label">🌡️ {t("avgTemp")}</div>
             <div className="value">{formatTemp(risk.avgTemp, units)}</div>
           </div>
           <div className="stat-card">
-            <div className="label">📈 14d trend</div>
+            <div className="label">📈 {t("trend14d")}</div>
             <div className="value">{TREND_LABEL[trend]}</div>
           </div>
         </div>
@@ -156,7 +158,7 @@ function DashboardContent({ data, countyName, navigate }) {
 
       <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", marginBottom: "1.25rem" }}>
         <button className="retry-btn" onClick={handleDownload}>
-          ⬇ Download card
+          ⬇ {t("download")}
         </button>
         {typeof Notification !== "undefined" && (
           <button
@@ -166,32 +168,32 @@ function DashboardContent({ data, countyName, navigate }) {
             aria-pressed={notifyEnabled}
             title={permission === "denied" ? "Notifications blocked in browser settings" : undefined}
           >
-            {notifyEnabled ? "🔔 Notifications on" : "🔕 Notify me if High"}
+            {notifyEnabled ? `🔔 ${t("notifyOn")}` : `🔕 ${t("notify")}`}
           </button>
         )}
       </div>
 
       <div className="panel">
         <div className="panel-header">
-          <span className="title">This session</span>
+          <span className="title">{t("sessionTitle")}</span>
         </div>
         <div className="sparkline-row">
           <Sparkline points={history} />
           <span style={{ fontSize: "0.78rem", color: "rgba(var(--paper-rgb),0.55)" }}>
-            Risk score seen so far this visit (resets on reload)
+            {t("sessionDesc")}
           </span>
         </div>
       </div>
 
       <div className="panel">
         <div className="panel-header">
-          <span className="title">16-day forecast</span>
+          <span className="title">{t("forecastTitle")}</span>
           <div className="legend">
             <span>
-              <span className="dot" style={{ background: "#4a7a9c" }} /> rainfall
+              <span className="dot" style={{ background: "#4a7a9c" }} /> {t("rainfallLegend")}
             </span>
             <span>
-              <span className="dot" style={{ background: "#c15b3a" }} /> temperature
+              <span className="dot" style={{ background: "#c15b3a" }} /> {t("temperatureLegend")}
             </span>
           </div>
         </div>
@@ -201,11 +203,11 @@ function DashboardContent({ data, countyName, navigate }) {
           style={{ marginTop: "0.75rem" }}
           onClick={() => navigate(`/county/${encodeURIComponent(countyName)}/forecast`)}
         >
-          View detailed forecast &rarr;
+          {t("viewForecast")} &rarr;
         </button>
       </div>
 
-      <div className="disclaimer">ⓘ Educational estimate, not a medical diagnosis</div>
+      <div className="disclaimer">ⓘ {t("disclaimer")}</div>
     </>
   );
 }

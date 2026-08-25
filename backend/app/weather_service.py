@@ -47,10 +47,21 @@ def compute_risk_score(daily_json):
     if not precip or not humidity or not tmax or not tmin:
         raise WeatherServiceError("Weather service returned incomplete data")
 
-    n = len(precip)
-    total_rainfall = sum(precip)
-    avg_humidity = sum(humidity) / n
-    avg_temp = sum((tmax[i] + tmin[i]) / 2 for i in range(n)) / n
+    # Open-Meteo occasionally returns null for the most recent day or two of
+    # a field (data not finalized yet). Drop any day where a value is
+    # missing rather than letting sum()/division blow up on None.
+    rows = [
+        (p, h, mx, mn)
+        for p, h, mx, mn in zip(precip, humidity, tmax, tmin)
+        if p is not None and h is not None and mx is not None and mn is not None
+    ]
+    if not rows:
+        raise WeatherServiceError("Weather service returned no usable data for this period")
+
+    n = len(rows)
+    total_rainfall = sum(r[0] for r in rows)
+    avg_humidity = sum(r[1] for r in rows) / n
+    avg_temp = sum((r[2] + r[3]) / 2 for r in rows) / n
 
     rainfall_score = _clamp(total_rainfall / 120, 0, 1) * 40
     humidity_score = _clamp((avg_humidity - 40) / 45, 0, 1) * 30

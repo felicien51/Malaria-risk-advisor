@@ -17,6 +17,7 @@ def fetch_weather(lat, lon, past_days=14, forecast_days=1, timeout=8):
                 "temperature_2m_min",
                 "precipitation_sum",
                 "relative_humidity_2m_mean",
+                "wind_speed_10m_max",
             ]
         ),
         "timezone": "auto",

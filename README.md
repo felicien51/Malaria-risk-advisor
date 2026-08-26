@@ -1,132 +1,137 @@
 # Malaria Risk Advisor
 
-A React application that estimates weather-driven malaria transmission risk
-for any of Kenya's 47 counties, using live rainfall, humidity and temperature
-data. Built as Phase 1 of a 3-phase capstone (React frontend → Flask +
-PostgreSQL backend → authentication).
+A full-stack application that estimates weather-driven malaria transmission
+risk for any of Kenya's 47 counties, lets users create an account, save a
+personal watchlist of counties, and track how risk changes over time.
 
-**Live demo:** https://malaria-risk-advisor.vercel.app/
+Built in three phases: a React frontend calling a public weather API
+directly (Phase 1), a Flask + PostgreSQL backend that took over the data
+layer and added persistence (Phase 2), and authentication is part of Phase
+2 as well — ownership-based access control on every saved record.
+
+**Live demo:** https://malaria-risk-advisor.vercel.app/ (frontend) —
+backend deployment link added once live.
 
 ## Problem
 
 Malaria transmission risk rises and falls with weather: rainfall creates
-standing water for mosquito breeding, humidity extends mosquito lifespan, and
-warm temperatures speed up parasite development. This app turns that
-relationship into a simple, transparent risk score so a user can check
-conditions for their county at a glance, rather than needing to interpret raw
-weather data themselves.
+standing water for mosquito breeding, humidity extends mosquito lifespan,
+and warm temperatures speed up parasite development. Phase 1 let anyone
+check a county's current risk, but had no memory — every visit meant
+re-searching the same counties with no record of how risk had changed.
+Phase 2 fixes that with real accounts and a persistent, per-user watchlist
+and history.
 
-## Live features
+## Architecture
 
-- Search/browse all 47 Kenyan counties, with a "recently viewed" quick list
-- A 0-100 risk score (Low / Moderate / High) computed from the trailing
-  14 days of weather, with a visible breakdown of what drove the score
-- A 16-day forward forecast (rainfall + temperature) with a 7/16-day toggle
-- **Compare view** — put up to 3 counties side by side
-- **Kenya risk map** — all 47 counties plotted and colored by current risk
-  (approximate positions by coordinate, not official GIS county boundaries)
-- **Session risk history** — a small sparkline showing how a county's score
-  moved during your visit (resets on reload, not persisted — that's Phase 2)
-- **Shareable link** — copy a direct link to a county's dashboard
-- **Downloadable risk card** — exports a PNG summary card via the Canvas API
-- **Optional high-risk browser notifications** — opt in per county; requires
-  browser permission and the tab to stay open (no push server yet)
-- **Dark/light theme** and **metric/imperial units**, both persisted locally
-- **English/Swahili** toggle for the app's navigation and key headings
-  (scoped to UI chrome, not a full translation of every dynamic string)
-- A methodology page explaining exactly how the score is calculated
-- Loading, error (with retry), and empty states throughout
-- Accessibility basics: skip-to-content link, aria-live regions for
-  loading/copy states, aria-labels on icon-only buttons, keyboard-focusable
-  controls
+```
+React (Vite)  →  Flask API  →  PostgreSQL
+                      ↓
+                 Open-Meteo (external weather data)
+```
 
-## Setup instructions
+The frontend never calls Open-Meteo directly anymore — the Flask backend
+owns that call, computes the risk score server-side, and (for logged-in
+users with a county on their watchlist) logs the result to build a real
+history.
+
+## Repository structure
+
+```
+/               React frontend (Vite)
+  src/
+    pages/          Home, Dashboard, Forecast, Compare, Watchlist, Login, Register, About
+    components/     RiskGauge, ForecastChart, Layout, ProtectedRoute, ErrorBoundary
+    context/        AuthContext, PreferencesContext, LanguageContext
+    api/            client.js — talks to the Flask backend
+    hooks/          useWeatherData, useRecentCounties, useSessionRiskLog, useRiskNotifications
+    utils/          riskScore.js, downloadCard.js
+    data/           counties.js — 47 counties with coordinates
+
+/backend        Flask + PostgreSQL API
+  app/
+    models.py       User, WatchedCounty, RiskLog
+    routes/         auth.py, watchlist.py, risk.py
+    weather_service.py   Open-Meteo client + risk scoring (mirrors src/utils/riskScore.js)
+  migrations/     Flask-Migrate history
+  README.md       Full backend setup + API reference
+```
+
+## Setup
+
+### Backend (start this first)
 
 ```bash
-git clone <your-repo-url>
-cd malaria-risk-advisor
+cd backend
+python3 -m venv venv
+source venv/bin/activate        # venv\Scripts\activate on Windows
+pip install -r requirements.txt
+cp .env.example .env            # then edit with real secrets — see backend/README.md
+flask db upgrade
+python wsgi.py                  # runs on http://localhost:5000
+```
+
+Full details — data model, every endpoint, auth model — are in
+[`backend/README.md`](./backend/README.md).
+
+### Frontend
+
+```bash
 npm install
-npm run dev
+cp .env.example .env            # VITE_API_URL, defaults to http://localhost:5000/api
+npm run dev                     # runs on http://localhost:5173
 ```
 
-The app runs at `http://localhost:5173`. No environment variables or API
-keys are required.
+Both need to be running at the same time for the app to work locally.
 
-To build for production:
+## Authentication & ownership
 
-```bash
-npm run build
-npm run preview
-```
+JWT-based auth (register/login return a token, sent as
+`Authorization: Bearer <token>` on every subsequent request). Every
+watchlist record belongs to exactly one user — the backend scopes every
+read, update, and delete to `get_jwt_identity()`, so a request for another
+user's data returns `404`, not a leaked "forbidden." Checking a county's
+current risk itself doesn't require an account (matching Phase 1's open
+behavior); saving it to a watchlist does.
 
-## API used
+## Data model
 
-**[Open-Meteo](https://open-meteo.com/)** - free weather API, no API key
-required, no published rate limit for non-commercial use.
+**User** — id, email (unique), password_hash, created_at.
 
-Endpoint: `GET https://api.open-meteo.com/v1/forecast`
+**WatchedCounty** — id, user_id (FK → User), county_name, lat, lon,
+created_at. One row per user per county.
 
-Parameters used:
-- `latitude`, `longitude` - county coordinates (hardcoded lookup table,
-  since Kenya's 47 counties are a fixed set)
-- `daily` - `temperature_2m_max`, `temperature_2m_min`, `precipitation_sum`,
-  `relative_humidity_2m_mean`, `wind_speed_10m_max`
-- `past_days=14` - trailing window used for the risk score
-- `forecast_days=16` - forward outlook (`forecast_days=1` on the map view,
-  which only needs the current score per county, not a full forecast)
+**RiskLog** — id, watched_county_id (FK → WatchedCounty), score, level,
+rainfall, humidity, temp, recorded_at. A WatchedCounty has many RiskLog
+entries — this is what powers the trend view.
 
-The map view fetches all 47 counties in small batches of 8 concurrent
-requests rather than all at once, to be polite to the API.
+## Features
 
-## Risk-scoring logic
+- Search or browse all 47 counties; no account required to check risk
+- Register / log in; per-user saved watchlist with full CRUD (add, view,
+  rename/swap the county, remove)
+- Risk history per watched county, persisted server-side
+- 16-day forecast, 7/16-day toggle
+- County comparison view (up to 3 side by side)
+- Downloadable risk-summary card (PNG)
+- Optional browser notifications for high-risk alerts
+- Dark/light theme, metric/imperial units, English/Swahili — all persisted
+- Loading, error (with retry), and empty states throughout; an error
+  boundary catches any unexpected render failure instead of a blank page
 
-The score is a transparent, weighted heuristic (not a medical model):
+## Known limitations
 
-| Factor | Weight | Basis |
-|---|---|---|
-| Rainfall (14-day total) | 40% | Standing water for larval breeding |
-| Humidity (14-day average) | 30% | >60% extends adult mosquito lifespan |
-| Temperature (14-day average) | 30% | 20-30C speeds parasite development |
-
-See `src/utils/riskScore.js` for the exact calculation.
-
-## Project structure
-
-```
-src/
-  components/   RiskGauge, ForecastChart, Layout, Sparkline
-  pages/        Home, Dashboard, Forecast, Compare, MapView, About
-  hooks/        useWeatherData, useRecentCounties, useSessionRiskLog,
-                useRiskNotifications, useAllCountiesRisk
-  context/      PreferencesContext (theme/units), LanguageContext (en/sw)
-  utils/        riskScore.js (scoring logic), downloadCard.js (PNG export)
-  data/         counties.js (47 counties with coordinates)
-```
-
-## Known limitations / possible improvements
-
-- County coordinates point to the county's main town, not a precise
-  centroid - risk is representative of that area, not hyper-local
-- The risk-scoring thresholds are a simplified educational heuristic based
-  on documented environmental drivers of transmission, not a clinical or
-  epidemiological model, and should not be used for medical decisions
-- The Kenya risk map plots counties by coordinate, not real GIS county
-  border shapes — there was no offline Kenya county GeoJSON available
-- Browser notifications only fire while the tab is open (no service worker
-  or push server) — a genuinely reliable alert system needs a Phase 2/3
-  backend
-- Swahili translation covers navigation and key headings only, not every
+- The risk-scoring thresholds are a transparent educational heuristic, not
+  a clinical or epidemiological model — see the in-app Methodology page
+- County coordinates point to each county's main town, not a precise
+  centroid
+- Browser notifications only fire while the tab is open (no push server)
+- Swahili translation covers navigation and key headings, not every
   dynamic string
-- No cross-session persistence yet — recently viewed counties and unit/theme
-  preferences use localStorage, but saved watchlists and risk history don't
-  survive a full data reset (planned properly for Phase 2 with a real
-  backend + database)
-- No user accounts yet (planned for Phase 3)
 
-## Roadmap (Phases 2 and 3)
+## Roadmap
 
-- **Phase 2:** Flask + PostgreSQL backend proxying Open-Meteo, persisting
-  saved counties and historical risk scores, and a real push-notification
-  service
-- **Phase 3:** Authentication so each user has their own saved counties,
-  alert preferences, and risk history
+**Phase 3:** was originally scoped for authentication, but auth landed in
+Phase 2 to match the actual assignment requirements. Phase 3 will instead
+focus on production hardening: rate limiting, refresh tokens, and
+deployment polish.

@@ -14,6 +14,9 @@ export default function Watchlist() {
   const [error, setError] = useState(null);
   const [selectedCounty, setSelectedCounty] = useState("");
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editValue, setEditValue] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const load = useCallback(() => {
     setStatus("loading");
@@ -37,6 +40,7 @@ export default function Watchlist() {
     e.preventDefault();
     if (!selectedCounty) return;
     setAdding(true);
+    setError(null);
     try {
       await api.addToWatchlist(selectedCounty, token);
       setSelectedCounty("");
@@ -49,11 +53,39 @@ export default function Watchlist() {
   };
 
   const handleRemove = async (id) => {
+    setError(null);
     try {
       await api.removeFromWatchlist(id, token);
       setItems((prev) => prev.filter((i) => i.id !== id));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't remove that county.");
+    }
+  };
+
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setEditValue("");
+    setError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditValue("");
+  };
+
+  const handleSaveEdit = async (id) => {
+    if (!editValue) return;
+    setSavingEdit(true);
+    setError(null);
+    try {
+      const updated = await api.updateWatchlistItem(id, editValue, token);
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...updated, latest: i.latest } : i)));
+      setEditingId(null);
+      setEditValue("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't update that entry.");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -104,19 +136,57 @@ export default function Watchlist() {
         <div className="watchlist-grid">
           {items.map((item) => {
             const latest = item.latest;
+            const isEditing = editingId === item.id;
+            // Swapping a saved county to one already on the list would collide
+            // with the backend's uniqueness rule, so it's excluded here too.
+            const swapOptions = COUNTIES.filter(
+              (c) => c.name === item.county_name || !watchedNames.has(c.name)
+            );
+
             return (
               <div className="panel watchlist-card" key={item.id}>
                 <div className="panel-header">
                   <span className="title">{item.county_name}</span>
-                  <button
-                    className="icon-btn"
-                    onClick={() => handleRemove(item.id)}
-                    aria-label={`Remove ${item.county_name} from watchlist`}
-                  >
-                    ✕
-                  </button>
+                  <div style={{ display: "flex", gap: "0.4rem" }}>
+                    <button
+                      className="icon-btn"
+                      onClick={() => (isEditing ? cancelEdit() : startEdit(item))}
+                      aria-label={isEditing ? "Cancel edit" : `Change county for this entry`}
+                    >
+                      {isEditing ? "✕" : "✎"}
+                    </button>
+                    <button
+                      className="icon-btn"
+                      onClick={() => handleRemove(item.id)}
+                      aria-label={`Remove ${item.county_name} from watchlist`}
+                    >
+                      🗑
+                    </button>
+                  </div>
                 </div>
-                {latest ? (
+
+                {isEditing ? (
+                  <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                    <select
+                      className="county-select"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      style={{ flex: 1 }}
+                    >
+                      <option value="">Change to…</option>
+                      {swapOptions.map((c) => (
+                        <option key={c.name} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      className="retry-btn"
+                      onClick={() => handleSaveEdit(item.id)}
+                      disabled={!editValue || savingEdit}
+                    >
+                      {savingEdit ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                ) : latest ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                     <span
                       className="risk-pill"
@@ -133,13 +203,16 @@ export default function Watchlist() {
                     No history yet — view this county's dashboard to log a reading.
                   </p>
                 )}
-                <button
-                  className="retry-btn"
-                  style={{ marginTop: "0.75rem" }}
-                  onClick={() => navigate(`/county/${encodeURIComponent(item.county_name)}`)}
-                >
-                  View dashboard →
-                </button>
+
+                {!isEditing && (
+                  <button
+                    className="retry-btn"
+                    style={{ marginTop: "0.75rem" }}
+                    onClick={() => navigate(`/county/${encodeURIComponent(item.county_name)}`)}
+                  >
+                    View dashboard →
+                  </button>
+                )}
               </div>
             );
           })}

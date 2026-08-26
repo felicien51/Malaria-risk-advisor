@@ -16,24 +16,24 @@ export default function ForecastChart({ rows }) {
       day: "numeric",
       month: "short",
     }),
-    rainfall: row.precipitation,
-    temperature: Math.round(row.tempMean * 10) / 10,
+    rainfall: row.precipitation ?? null,
+    temperature: row.tempMean != null ? Math.round(row.tempMean * 10) / 10 : null,
   }));
 
   return (
     <ResponsiveContainer width="100%" height={220}>
       <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-        <CartesianGrid stroke="rgba(245,239,226,0.06)" vertical={false} />
+        <CartesianGrid stroke="rgba(var(--paper-rgb),0.06)" vertical={false} />
         <XAxis
           dataKey="day"
-          tick={{ fill: "rgba(245,239,226,0.45)", fontSize: 11 }}
-          axisLine={{ stroke: "rgba(245,239,226,0.1)" }}
+          tick={{ fill: "rgba(var(--paper-rgb),0.45)", fontSize: 11 }}
+          axisLine={{ stroke: "rgba(var(--paper-rgb),0.1)" }}
           tickLine={false}
           interval={Math.ceil(chartData.length / 8)}
         />
         <YAxis
           yAxisId="left"
-          tick={{ fill: "rgba(245,239,226,0.45)", fontSize: 11 }}
+          tick={{ fill: "rgba(var(--paper-rgb),0.45)", fontSize: 11 }}
           axisLine={false}
           tickLine={false}
           width={36}
@@ -41,12 +41,12 @@ export default function ForecastChart({ rows }) {
         <YAxis yAxisId="right" orientation="right" hide />
         <Tooltip
           contentStyle={{
-            background: "#12281f",
-            border: "1px solid rgba(245,239,226,0.15)",
+            background: "var(--ink-900)",
+            border: "1px solid rgba(var(--paper-rgb),0.15)",
             borderRadius: 10,
             fontSize: 12,
           }}
-          labelStyle={{ color: "#f5efe2" }}
+          labelStyle={{ color: "var(--paper)" }}
         />
         <Bar
           yAxisId="left"

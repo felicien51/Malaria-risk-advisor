@@ -6,17 +6,20 @@ import App from "./App.jsx";
 import { PreferencesProvider } from "./context/PreferencesContext.jsx";
 import { LanguageProvider } from "./context/LanguageContext.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <PreferencesProvider>
-          <LanguageProvider>
-            <App />
-          </LanguageProvider>
-        </PreferencesProvider>
-      </AuthProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <PreferencesProvider>
+            <LanguageProvider>
+              <App />
+            </LanguageProvider>
+          </PreferencesProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   </StrictMode>
 );

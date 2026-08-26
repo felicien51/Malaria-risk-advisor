@@ -2,20 +2,34 @@
 // including today) and "forecast" (today onward) slices, since we request
 // past_days=14 and forecast_days=16 in the same call.
 export function splitDaily(weatherJson) {
-  const daily = weatherJson.daily;
-  const dates = daily.time;
+  const daily = weatherJson?.daily || {};
+  const dates = daily.time || [];
+  const tempMaxArr = daily.temperature_2m_max || [];
+  const tempMinArr = daily.temperature_2m_min || [];
+  const precipArr = daily.precipitation_sum || [];
+  const humidityArr = daily.relative_humidity_2m_mean || [];
+  const windArr = daily.wind_speed_10m_max || [];
+
   const todayStr = new Date().toISOString().slice(0, 10);
   let todayIndex = dates.indexOf(todayStr);
   if (todayIndex === -1) todayIndex = 14; // fallback: past_days count
 
+  // Open-Meteo occasionally returns null for a field on the most recent
+  // day or two (not finalized yet), and some fields may be entirely absent
+  // depending on which the backend requested. Missing arrays default to []
+  // above; missing individual values here become null and are filtered out
+  // wherever they'd break a calculation.
   const rows = dates.map((date, i) => ({
     date,
-    tempMax: daily.temperature_2m_max[i],
-    tempMin: daily.temperature_2m_min[i],
-    tempMean: (daily.temperature_2m_max[i] + daily.temperature_2m_min[i]) / 2,
-    precipitation: daily.precipitation_sum[i],
-    humidity: daily.relative_humidity_2m_mean[i],
-    windMax: daily.wind_speed_10m_max[i],
+    tempMax: tempMaxArr[i] ?? null,
+    tempMin: tempMinArr[i] ?? null,
+    tempMean:
+      tempMaxArr[i] != null && tempMinArr[i] != null
+        ? (tempMaxArr[i] + tempMinArr[i]) / 2
+        : null,
+    precipitation: precipArr[i] ?? null,
+    humidity: humidityArr[i] ?? null,
+    windMax: windArr[i] ?? null,
   }));
 
   return {
@@ -27,6 +41,15 @@ export function splitDaily(weatherJson) {
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
+// Keeps only rows with every value this calculation needs — mirrors the
+// backend's compute_risk_score, which drops incomplete days rather than
+// letting a null propagate into the math.
+function completeRows(rows) {
+  return rows.filter(
+    (r) => r.precipitation != null && r.humidity != null && r.tempMean != null
+  );
+}
+
 /**
  * Estimates malaria transmission risk from trailing weather conditions.
  * This is a simplified, transparent heuristic based on well-documented
@@ -37,11 +60,23 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
  * It is an educational estimate, not a diagnostic or medical tool.
  */
 export function computeRiskScore(trailingRows) {
-  const totalRainfall = trailingRows.reduce((sum, d) => sum + d.precipitation, 0);
-  const avgHumidity =
-    trailingRows.reduce((sum, d) => sum + d.humidity, 0) / trailingRows.length;
-  const avgTemp =
-    trailingRows.reduce((sum, d) => sum + d.tempMean, 0) / trailingRows.length;
+  const rows = completeRows(trailingRows);
+
+  if (rows.length === 0) {
+    return {
+      score: 0,
+      level: "Low",
+      totalRainfall: 0,
+      avgHumidity: 0,
+      avgTemp: 0,
+      breakdown: { rainfallScore: 0, humidityScore: 0, temperatureScore: 0 },
+      incomplete: true,
+    };
+  }
+
+  const totalRainfall = rows.reduce((sum, d) => sum + d.precipitation, 0);
+  const avgHumidity = rows.reduce((sum, d) => sum + d.humidity, 0) / rows.length;
+  const avgTemp = rows.reduce((sum, d) => sum + d.tempMean, 0) / rows.length;
 
   // Rainfall score: 0 at 0mm over 14 days, maxes out around 120mm+
   const rainfallScore = clamp(totalRainfall / 120, 0, 1) * 40;
@@ -83,9 +118,10 @@ export function computeRiskScore(trailingRows) {
 // Compares the score from the most recent 7 days against the prior 7 days
 // within the trailing window to report whether risk is rising or falling.
 export function computeTrend(trailingRows) {
-  if (trailingRows.length < 14) return "steady";
-  const recent = trailingRows.slice(-7);
-  const prior = trailingRows.slice(-14, -7);
+  const rows = completeRows(trailingRows);
+  if (rows.length < 14) return "steady";
+  const recent = rows.slice(-7);
+  const prior = rows.slice(-14, -7);
   const recentScore = computeRiskScore(recent).score;
   const priorScore = computeRiskScore(prior).score;
   const diff = recentScore - priorScore;

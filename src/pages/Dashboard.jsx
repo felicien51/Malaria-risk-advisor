@@ -8,6 +8,8 @@ import { useSessionRiskLog } from "../hooks/useSessionRiskLog";
 import { useRiskNotifications } from "../hooks/useRiskNotifications";
 import { usePreferences, formatTemp, formatRainfall } from "../context/PreferencesContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+import { api, ApiError } from "../api/client";
 import { downloadRiskCard } from "../utils/downloadCard";
 import RiskGauge from "../components/RiskGauge";
 import ForecastChart from "../components/ForecastChart";
@@ -104,6 +106,50 @@ export default function Dashboard() {
   );
 }
 
+function SaveToWatchlistButton({ countyName }) {
+  const { isAuthenticated, token } = useAuth();
+  const navigate = useNavigate();
+  const [state, setState] = useState("idle"); // idle | saving | saved | error
+  const [message, setMessage] = useState(null);
+
+  if (!isAuthenticated) {
+    return (
+      <button className="retry-btn" onClick={() => navigate("/login")}>
+        📌 Log in to save
+      </button>
+    );
+  }
+
+  const handleSave = async () => {
+    setState("saving");
+    setMessage(null);
+    try {
+      await api.addToWatchlist(countyName, token);
+      setState("saved");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setState("saved"); // already on watchlist — same end state
+      } else {
+        setState("error");
+        setMessage(err instanceof ApiError ? err.message : "Couldn't save this county.");
+      }
+    }
+  };
+
+  if (state === "saved") {
+    return <button className="retry-btn" disabled>✓ Saved to watchlist</button>;
+  }
+
+  return (
+    <>
+      <button className="retry-btn" onClick={handleSave} disabled={state === "saving"}>
+        {state === "saving" ? "Saving…" : "📌 Save to watchlist"}
+      </button>
+      {message && <span style={{ fontSize: "0.78rem", color: "var(--risk-high)" }}>{message}</span>}
+    </>
+  );
+}
+
 function DashboardContent({ data, countyName, navigate, t }) {
   const { trailing, forecast } = splitDaily(data);
   const risk = computeRiskScore(trailing);
@@ -156,7 +202,8 @@ function DashboardContent({ data, countyName, navigate, t }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", marginBottom: "1.25rem" }}>
+      <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center", marginBottom: "1.25rem" }}>
+        <SaveToWatchlistButton countyName={countyName} />
         <button className="retry-btn" onClick={handleDownload}>
           ⬇ {t("download")}
         </button>

@@ -1,10 +1,18 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { usePreferences } from "../context/PreferencesContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 
 export default function Layout() {
   const { theme, toggleTheme, units, toggleUnits } = usePreferences();
   const { lang, toggleLang, t } = useLanguage();
+  const { isAuthenticated, user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
 
   return (
     <div className="app-shell" lang={lang}>
@@ -24,11 +32,28 @@ export default function Layout() {
             <NavLink to="/compare" className={({ isActive }) => (isActive ? "active" : "")}>
               {t("navCompare")}
             </NavLink>
-            
+            {isAuthenticated && (
+              <NavLink to="/watchlist" className={({ isActive }) => (isActive ? "active" : "")}>
+                Watchlist
+              </NavLink>
+            )}
             <NavLink to="/about" className={({ isActive }) => (isActive ? "active" : "")}>
               {t("navAbout")}
             </NavLink>
           </nav>
+
+          {isAuthenticated ? (
+            <div className="auth-nav">
+              <span className="auth-email" title={user?.email}>{user?.email}</span>
+              <button className="icon-btn" onClick={handleLogout}>Log out</button>
+            </div>
+          ) : (
+            <div className="auth-nav">
+              <NavLink to="/login" className="icon-btn">Log in</NavLink>
+              <NavLink to="/register" className="icon-btn">Register</NavLink>
+            </div>
+          )}
+
           <button className="icon-btn" onClick={toggleLang} aria-label="Toggle language">
             {lang === "en" ? "EN" : "SW"}
           </button>

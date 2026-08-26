@@ -651,3 +651,131 @@ footer {
 .skip-link:focus {
   left: 0;
 }
+
+/* ---------- Auth nav ---------- */
+.auth-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.auth-email {
+  font-size: 0.8rem;
+  color: rgba(245, 239, 226, 0.6);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+a.icon-btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ---------- Auth pages ---------- */
+.auth-page {
+  display: flex;
+  justify-content: center;
+  padding: clamp(2rem, 6vw, 4rem) 1rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--ink-900);
+  border: 1px solid rgba(245, 239, 226, 0.1);
+  border-radius: 16px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-title {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 500;
+  margin: 0 0 1.25rem;
+}
+
+.auth-label {
+  font-size: 0.8rem;
+  color: rgba(245, 239, 226, 0.6);
+  margin: 0.75rem 0 0.35rem;
+}
+
+.auth-card input {
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 239, 226, 0.14);
+  background: var(--ink-950);
+  color: var(--paper);
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.auth-card input:focus {
+  border-color: var(--ochre-500);
+}
+
+.auth-hint {
+  font-size: 0.72rem;
+  color: rgba(245, 239, 226, 0.4);
+  margin: 0.35rem 0 0;
+}
+
+.auth-error {
+  margin-top: 0.85rem;
+  padding: 0.65rem 0.85rem;
+  background: rgba(193, 91, 58, 0.15);
+  border: 1px solid rgba(193, 91, 58, 0.35);
+  border-radius: 9px;
+  color: var(--risk-high);
+  font-size: 0.82rem;
+}
+
+.auth-submit {
+  margin-top: 1.25rem;
+  width: 100%;
+  text-align: center;
+  background: var(--ochre-500);
+  border-color: var(--ochre-500);
+  color: var(--ink-950);
+  font-weight: 500;
+}
+
+.auth-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-switch {
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: rgba(245, 239, 226, 0.55);
+}
+
+.auth-switch a {
+  color: var(--ochre-400);
+  text-decoration: none;
+}
+
+/* ---------- Watchlist page ---------- */
+.watchlist-add-row {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.watchlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.watchlist-card {
+  margin-bottom: 0;
+}

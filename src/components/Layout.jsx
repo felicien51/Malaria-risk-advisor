@@ -45,7 +45,7 @@ export default function Layout() {
 
           {isAuthenticated ? (
             <div className="auth-nav">
-              <span className="auth-email" title={user?.email}>{user?.email}</span>
+              <span className="auth-email" title={user?.email}>{user?.username || user?.email}</span>
               <button className="icon-btn" onClick={handleLogout}>Log out</button>
             </div>
           ) : (

@@ -3,7 +3,10 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { ApiError } from "../api/client";
 
+const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
+
 export default function Register() {
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
@@ -15,6 +18,10 @@ export default function Register() {
     e.preventDefault();
     setError(null);
 
+    if (!USERNAME_RE.test(username)) {
+      setError("Username must be 3-30 characters: letters, numbers, or underscores only.");
+      return;
+    }
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
       return;
@@ -22,7 +29,7 @@ export default function Register() {
 
     setSubmitting(true);
     try {
-      await register(email, password);
+      await register(username, email, password);
       navigate("/watchlist");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
@@ -36,6 +43,19 @@ export default function Register() {
       <form className="auth-card" onSubmit={handleSubmit}>
         <p className="hero-eyebrow">Get started</p>
         <h1 className="auth-title">Create an account</h1>
+
+        <label className="auth-label" htmlFor="username">Username</label>
+        <input
+          id="username"
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+          minLength={3}
+          maxLength={30}
+          autoComplete="username"
+        />
+        <p className="auth-hint">3-30 characters: letters, numbers, underscores.</p>
 
         <label className="auth-label" htmlFor="email">Email</label>
         <input

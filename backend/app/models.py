@@ -12,6 +12,7 @@ class User(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    username = db.Column(db.String(50), unique=True, nullable=True, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
 
@@ -26,7 +27,12 @@ class User(db.Model):
         return check_password_hash(self.password_hash, password)
 
     def to_dict(self):
-        return {"id": self.id, "email": self.email, "created_at": self.created_at.isoformat()}
+        return {
+            "id": self.id,
+            "email": self.email,
+            "username": self.username,
+            "created_at": self.created_at.isoformat(),
+        }
 
 
 class WatchedCounty(db.Model):

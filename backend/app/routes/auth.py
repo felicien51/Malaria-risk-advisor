@@ -7,23 +7,31 @@ from ..models import User
 auth_bp = Blueprint("auth", __name__)
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
 
 
 @auth_bp.post("/register")
 def register():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
+    username = (data.get("username") or "").strip()
     password = data.get("password") or ""
 
     if not email or not EMAIL_RE.match(email):
         return jsonify({"error": "A valid email is required"}), 400
+    if not username or not USERNAME_RE.match(username):
+        return jsonify({
+            "error": "Username must be 3-30 characters: letters, numbers, or underscores only"
+        }), 400
     if len(password) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
 
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "An account with that email already exists"}), 409
+    if User.query.filter_by(username=username).first():
+        return jsonify({"error": "That username is already taken"}), 409
 
-    user = User(email=email)
+    user = User(email=email, username=username)
     user.set_password(password)
     db.session.add(user)
     db.session.commit()

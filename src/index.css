@@ -149,15 +149,37 @@ main {
 .hero {
   text-align: center;
   padding: clamp(2rem, 6vw, 4rem) 0 clamp(1.5rem, 4vw, 2.5rem);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-decor {
+  position: absolute;
+  top: -120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 640px;
+  height: 320px;
+  background: radial-gradient(ellipse at center, rgba(219, 166, 73, 0.16), transparent 60%),
+    radial-gradient(ellipse 300px 200px at 30% 70%, rgba(127, 166, 106, 0.14), transparent 65%),
+    radial-gradient(ellipse 260px 180px at 75% 60%, rgba(74, 122, 156, 0.1), transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero > *:not(.hero-decor) {
+  position: relative;
+  z-index: 1;
 }
 
 .hero-eyebrow {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ochre-400);
   margin: 0 0 1rem;
+  white-space: nowrap;
 }
 
 .hero h1 {
@@ -173,6 +195,52 @@ main {
   font-size: 1.05rem;
   max-width: 40ch;
   margin: 0 auto 2rem;
+}
+
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: clamp(1.5rem, 5vw, 3rem);
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(var(--paper-rgb), 0.08);
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.hero-stat-value {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 500;
+  color: var(--paper);
+}
+
+.hero-stat-label {
+  font-size: 0.72rem;
+  color: rgba(var(--paper-rgb), 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.recent-section {
+  margin: 0 auto 2rem;
+  max-width: 720px;
+}
+
+.recent-label {
+  font-size: 0.75rem;
+  color: rgba(var(--paper-rgb), 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 0.6rem;
 }
 
 .search-box {
@@ -778,4 +846,60 @@ a.icon-btn {
 
 .watchlist-card {
   margin-bottom: 0;
+}
+
+/* ---------- Settings menu (consolidated nav utilities) ---------- */
+.nav-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(var(--paper-rgb), 0.12);
+  margin: 0 0.15rem;
+}
+
+.icon-btn-accent {
+  background: var(--ochre-500);
+  border-color: var(--ochre-500);
+  color: var(--ink-950);
+  font-weight: 500;
+}
+
+.settings-menu {
+  position: relative;
+}
+
+.settings-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  background: var(--ink-900);
+  border: 1px solid rgba(var(--paper-rgb), 0.12);
+  border-radius: 12px;
+  padding: 0.4rem;
+  min-width: 200px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  z-index: 50;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  color: var(--paper);
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-row:hover {
+  background: rgba(var(--paper-rgb), 0.06);
+}
+
+.settings-value {
+  color: rgba(var(--paper-rgb), 0.55);
+  font-size: 0.8rem;
 }

@@ -21,6 +21,7 @@ export default function Home() {
   return (
     <div>
       <section className="hero">
+        <div className="hero-decor" aria-hidden="true" />
         <p className="hero-eyebrow">{t("heroEyebrow")}</p>
         <h1>{t("heroTitle")}</h1>
         <p>{t("heroBody")}</p>
@@ -34,19 +35,37 @@ export default function Home() {
             aria-label={t("searchPlaceholder")}
           />
         </div>
+
+        <div className="hero-stats">
+          <div className="hero-stat">
+            <span className="hero-stat-value">47</span>
+            <span className="hero-stat-label">Counties covered</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat-value">16</span>
+            <span className="hero-stat-label">Day forecast</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat-value">Live</span>
+            <span className="hero-stat-label">Weather data</span>
+          </div>
+        </div>
       </section>
 
       {recent.length > 0 && (
-        <div className="recent-chips">
-          {recent.map((name) => (
-            <button
-              key={name}
-              className="recent-chip"
-              onClick={() => navigate(`/county/${encodeURIComponent(name)}`)}
-            >
-              ↻ {name}
-            </button>
-          ))}
+        <div className="recent-section">
+          <p className="recent-label">Recently viewed</p>
+          <div className="recent-chips">
+            {recent.map((name) => (
+              <button
+                key={name}
+                className="recent-chip"
+                onClick={() => navigate(`/county/${encodeURIComponent(name)}`)}
+              >
+                ↻ {name}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

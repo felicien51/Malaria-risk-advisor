@@ -1,11 +1,10 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { usePreferences } from "../context/PreferencesContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import SettingsMenu from "./SettingsMenu.jsx";
 
 export default function Layout() {
-  const { theme, toggleTheme, units, toggleUnits } = usePreferences();
-  const { lang, toggleLang, t } = useLanguage();
+  const { lang, t } = useLanguage();
   const { isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -42,6 +41,8 @@ export default function Layout() {
             </NavLink>
           </nav>
 
+          <div className="nav-divider" aria-hidden="true" />
+
           {isAuthenticated ? (
             <div className="auth-nav">
               <span className="auth-email" title={user?.email}>{user?.email}</span>
@@ -50,19 +51,11 @@ export default function Layout() {
           ) : (
             <div className="auth-nav">
               <NavLink to="/login" className="icon-btn">Log in</NavLink>
-              <NavLink to="/register" className="icon-btn">Register</NavLink>
+              <NavLink to="/register" className="icon-btn icon-btn-accent">Register</NavLink>
             </div>
           )}
 
-          <button className="icon-btn" onClick={toggleLang} aria-label="Toggle language">
-            {lang === "en" ? "EN" : "SW"}
-          </button>
-          <button className="icon-btn" onClick={toggleUnits} aria-label="Toggle units">
-            {units === "metric" ? "°C / mm" : "°F / in"}
-          </button>
-          <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">
-            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
-          </button>
+          <SettingsMenu />
         </div>
       </header>
       <main id="main-content" tabIndex={-1}>

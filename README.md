@@ -1,137 +1,262 @@
 # Malaria Risk Advisor
 
 A full-stack application that estimates weather-driven malaria transmission
-risk for any of Kenya's 47 counties, lets users create an account, save a
-personal watchlist of counties, and track how risk changes over time.
+risk for any of Kenya's 47 counties. Users can check any county's risk
+without an account, or register to save a personal watchlist and track how
+risk changes over time.
 
-Built in three phases: a React frontend calling a public weather API
-directly (Phase 1), a Flask + PostgreSQL backend that took over the data
-layer and added persistence (Phase 2), and authentication is part of Phase
-2 as well — ownership-based access control on every saved record.
+**Live app:** https://malaria-risk-advisor.vercel.app
+**Live API:** https://malaria-risk-advisor-api.onrender.com/api
 
-**Live demo:** https://malaria-risk-advisor.vercel.app/ (frontend) —
-backend deployment link added once live.
+Built in phases: a React frontend calling a public weather API directly
+(Phase 1), then a Flask + PostgreSQL backend that took over the data layer,
+added persistence, and added user accounts with ownership-based access
+control (Phase 2).
 
-## Problem
+---
+
+## The problem
 
 Malaria transmission risk rises and falls with weather: rainfall creates
 standing water for mosquito breeding, humidity extends mosquito lifespan,
-and warm temperatures speed up parasite development. Phase 1 let anyone
-check a county's current risk, but had no memory — every visit meant
-re-searching the same counties with no record of how risk had changed.
-Phase 2 fixes that with real accounts and a persistent, per-user watchlist
-and history.
+and warm temperatures speed up parasite development. A one-off risk check
+is useful, but repeated manual re-checking with no memory of past results
+is wasted effort — especially for anyone (a health worker, a family) who
+tracks the same handful of counties regularly. This app turns that into a
+persistent, per-user watchlist with real history instead of a blank slate
+every visit.
+
+---
 
 ## Architecture
 
 ```
-React (Vite)  →  Flask API  →  PostgreSQL
-                      ↓
-                 Open-Meteo (external weather data)
+React (Vite)  ──────▶  Flask API  ──────▶  PostgreSQL
+  frontend/                app on Render      hosted on Render
+                            │
+                            ▼
+                      Open-Meteo (external weather API)
 ```
 
-The frontend never calls Open-Meteo directly anymore — the Flask backend
-owns that call, computes the risk score server-side, and (for logged-in
-users with a county on their watchlist) logs the result to build a real
-history.
+The frontend never calls Open-Meteo directly — Flask owns that call,
+computes the risk score server-side, and (for logged-in users who have a
+county on their watchlist) logs the result so a real history builds up
+over time.
+
+---
 
 ## Repository structure
 
 ```
-/               React frontend (Vite)
-  src/
-    pages/          Home, Dashboard, Forecast, Compare, Watchlist, Login, Register, About
-    components/     RiskGauge, ForecastChart, Layout, ProtectedRoute, ErrorBoundary
-    context/        AuthContext, PreferencesContext, LanguageContext
-    api/            client.js — talks to the Flask backend
-    hooks/          useWeatherData, useRecentCounties, useSessionRiskLog, useRiskNotifications
-    utils/          riskScore.js, downloadCard.js
-    data/           counties.js — 47 counties with coordinates
-
-/backend        Flask + PostgreSQL API
-  app/
-    models.py       User, WatchedCounty, RiskLog
-    routes/         auth.py, watchlist.py, risk.py
-    weather_service.py   Open-Meteo client + risk scoring (mirrors src/utils/riskScore.js)
-  migrations/     Flask-Migrate history
-  README.md       Full backend setup + API reference
+/
+├── frontend/               React (Vite) app
+│   ├── src/
+│   │   ├── pages/              Home, Dashboard, Forecast, Compare,
+│   │   │                       Watchlist, Login, Register, About
+│   │   ├── components/         RiskGauge, ForecastChart, Layout,
+│   │   │                       SettingsMenu, ProtectedRoute, ErrorBoundary
+│   │   ├── context/            AuthContext, PreferencesContext, LanguageContext
+│   │   ├── api/                 client.js — talks to the Flask backend
+│   │   ├── hooks/               useWeatherData, useRecentCounties,
+│   │   │                        useSessionRiskLog, useRiskNotifications
+│   │   ├── utils/                riskScore.js, downloadCard.js
+│   │   └── data/                 counties.js — 47 counties with coordinates
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── vercel.json               SPA rewrite so client-side routes survive refresh
+│   └── .env.example
+│
+├── backend/                 Flask + PostgreSQL API
+│   ├── app/
+│   │   ├── models.py             User, WatchedCounty, RiskLog
+│   │   ├── routes/                auth.py, watchlist.py, risk.py
+│   │   ├── weather_service.py     Open-Meteo client + risk scoring
+│   │   │                          (mirrors frontend/src/utils/riskScore.js)
+│   │   ├── counties.py            same 47 counties, backend copy
+│   │   ├── extensions.py
+│   │   └── __init__.py            app factory
+│   ├── migrations/                Flask-Migrate history
+│   ├── config.py
+│   ├── wsgi.py
+│   ├── requirements.txt
+│   └── .env.example
+│
+└── README.md                 this file
 ```
+
+---
 
 ## Setup
 
-### Backend (start this first)
+Both halves need to be running for the app to work locally. Start the
+backend first.
+
+### Backend
 
 ```bash
 cd backend
 python3 -m venv venv
 source venv/bin/activate        # venv\Scripts\activate on Windows
 pip install -r requirements.txt
-cp .env.example .env            # then edit with real secrets — see backend/README.md
-flask db upgrade
+
+cp .env.example .env            # then edit with real secrets, see below
+flask db upgrade                # creates/updates tables
 python wsgi.py                  # runs on http://localhost:5000
 ```
 
-Full details — data model, every endpoint, auth model — are in
-[`backend/README.md`](./backend/README.md).
+`.env` values:
+
+```
+SECRET_KEY=<generate: python -c "import secrets; print(secrets.token_hex(32))">
+JWT_SECRET_KEY=<generate a different one the same way>
+DATABASE_URL=postgresql://localhost/malaria_risk_advisor
+CORS_ORIGINS=http://localhost:5173
+```
+
+No PostgreSQL installed locally? Use SQLite instead for development —
+`DATABASE_URL=sqlite:///dev.db` — no other setup required. Production uses
+real PostgreSQL (see Deployment below).
 
 ### Frontend
 
 ```bash
+cd frontend
 npm install
 cp .env.example .env            # VITE_API_URL, defaults to http://localhost:5000/api
 npm run dev                     # runs on http://localhost:5173
 ```
 
-Both need to be running at the same time for the app to work locally.
+---
 
 ## Authentication & ownership
 
-JWT-based auth (register/login return a token, sent as
-`Authorization: Bearer <token>` on every subsequent request). Every
-watchlist record belongs to exactly one user — the backend scopes every
-read, update, and delete to `get_jwt_identity()`, so a request for another
-user's data returns `404`, not a leaked "forbidden." Checking a county's
-current risk itself doesn't require an account (matching Phase 1's open
-behavior); saving it to a watchlist does.
+JWT-based, via Flask-JWT-Extended. Registering or logging in returns a
+token; the frontend attaches it as `Authorization: Bearer <token>` on
+every request that needs it. Checking a county's current risk doesn't
+require an account — that stays open, matching Phase 1's behavior. Saving
+a county to a personal watchlist does require one.
+
+Every watchlist record belongs to exactly one user. The backend scopes
+every read, update, and delete to the token's identity
+(`get_jwt_identity()`), so a request for another user's data returns a
+plain `404`, never a leaked "forbidden" that would confirm the record
+exists.
+
+Registration requires an **email**, a **username** (3–30 characters:
+letters, numbers, underscores; must be unique), and a **password** (8+
+characters). The username is what's shown in the app's nav instead of the
+email. Accounts created before this field existed show their email as a
+fallback until they re-register or a profile-update endpoint is added.
+
+---
 
 ## Data model
 
-**User** — id, email (unique), password_hash, created_at.
+**User** — id, email (unique), username (unique, nullable for
+pre-existing accounts), password_hash, created_at.
 
 **WatchedCounty** — id, user_id (FK → User), county_name, lat, lon,
-created_at. One row per user per county.
+created_at. One row per user per county (unique constraint on the pair).
 
 **RiskLog** — id, watched_county_id (FK → WatchedCounty), score, level,
 rainfall, humidity, temp, recorded_at. A WatchedCounty has many RiskLog
-entries — this is what powers the trend view.
+entries — this is what powers the trend/history view.
+
+---
+
+## API reference
+
+| Method | Route | Auth | Description |
+|---|---|---|---|
+| POST | `/api/auth/register` | — | Create an account (email, username, password), returns a token |
+| POST | `/api/auth/login` | — | Log in, returns a token |
+| GET | `/api/auth/me` | required | Current user's profile |
+| GET | `/api/counties/<name>/risk` | optional | Live risk for any county; logs to history if the caller has it watchlisted |
+| GET | `/api/watchlist` | required | List the current user's watchlist |
+| POST | `/api/watchlist` | required | Add a county — body: `{ "county_name": "Kisumu" }` |
+| PATCH | `/api/watchlist/<id>` | required | Change the county on a watchlist entry |
+| DELETE | `/api/watchlist/<id>` | required | Remove a watchlist entry |
+| GET | `/api/watchlist/<id>/history` | required | Full risk history for one watched county |
+| GET | `/api/health` | — | Liveness check |
+
+All errors return JSON: `{"error": "..."}"`, with an appropriate status —
+`400` validation, `401` unauthenticated, `404` not found/not yours, `409`
+conflict (duplicate email/username/county), `502` weather service
+unreachable.
+
+---
+
+## Risk-scoring logic
+
+A transparent, weighted heuristic — not a clinical or diagnostic model:
+
+| Factor | Weight | Basis |
+|---|---|---|
+| Rainfall (14-day total) | 40% | Standing water for larval breeding |
+| Humidity (14-day average) | 30% | >60% extends adult mosquito lifespan |
+| Temperature (14-day average) | 30% | 20–30°C speeds parasite development |
+
+The same math exists in two places by design: `backend/app/weather_service.py`
+computes it server-side (source of truth, what gets logged to history),
+and `frontend/src/utils/riskScore.js` computes it client-side from the
+same raw weather data the backend forwards — so a page can render
+immediately without waiting on a second round trip. Both are hardened to
+skip any day with missing/null values (Open-Meteo occasionally hasn't
+finalized the most recent day or two).
+
+---
 
 ## Features
 
 - Search or browse all 47 counties; no account required to check risk
-- Register / log in; per-user saved watchlist with full CRUD (add, view,
-  rename/swap the county, remove)
+- Register / log in with a username; per-user saved watchlist with full
+  CRUD (add, rename/swap the county, remove)
 - Risk history per watched county, persisted server-side
 - 16-day forecast, 7/16-day toggle
 - County comparison view (up to 3 side by side)
 - Downloadable risk-summary card (PNG)
 - Optional browser notifications for high-risk alerts
-- Dark/light theme, metric/imperial units, English/Swahili — all persisted
+- Dark/light theme, metric/imperial units, English/Swahili — consolidated
+  into a single settings menu, all persisted locally
 - Loading, error (with retry), and empty states throughout; an error
   boundary catches any unexpected render failure instead of a blank page
 
+---
+
+## Deployment
+
+- **Frontend:** Vercel, root directory set to `frontend`. `VITE_API_URL`
+  set as an environment variable pointing at the deployed backend.
+  `vercel.json` rewrites all routes to `index.html` so client-side routes
+  (e.g. `/county/Kisumu`) survive a direct refresh instead of hitting
+  Vercel's own 404.
+- **Backend:** Render, root directory set to `backend`. Build command runs
+  `pip install -r requirements.txt && flask db upgrade`, so every deploy
+  migrates the database automatically. Connected to a Render-managed
+  PostgreSQL instance via `DATABASE_URL`.
+
+---
+
 ## Known limitations
 
-- The risk-scoring thresholds are a transparent educational heuristic, not
+- The risk-scoring thresholds are a simplified educational heuristic, not
   a clinical or epidemiological model — see the in-app Methodology page
 - County coordinates point to each county's main town, not a precise
   centroid
+- Open-Meteo may rate-limit requests from Render's free-tier shared IP
+  addresses more aggressively than from a residential IP — an
+  infrastructure characteristic of free hosting, not an application bug
 - Browser notifications only fire while the tab is open (no push server)
 - Swahili translation covers navigation and key headings, not every
   dynamic string
+- Accounts created before the username field existed have `username:
+  null` until they re-register
+
+---
 
 ## Roadmap
 
-**Phase 3:** was originally scoped for authentication, but auth landed in
-Phase 2 to match the actual assignment requirements. Phase 3 will instead
-focus on production hardening: rate limiting, refresh tokens, and
-deployment polish.
+Authentication landed in Phase 2 (moved up from the original Phase 3 plan
+to match the actual assignment requirements). Remaining ideas: rate
+limiting, refresh tokens, a profile-update endpoint for legacy accounts
+without a username, and general production hardening.

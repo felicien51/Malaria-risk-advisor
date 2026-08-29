@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -7,11 +8,15 @@ export default function Layout() {
   const { lang, t } = useLanguage();
   const { isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
+    setMenuOpen(false);
     navigate("/");
   };
+
+  const closeMenu = () => setMenuOpen(false);
 
   return (
     <div className="app-shell" lang={lang}>
@@ -19,24 +24,34 @@ export default function Layout() {
         Skip to content
       </a>
       <header className="top-nav">
-        <NavLink to="/" className="brand" aria-label="Malaria Risk Advisor home">
+        <NavLink to="/" className="brand" aria-label="Malaria Risk Advisor home" onClick={closeMenu}>
           <span className="brand-mark" aria-hidden="true">M</span>
           <span className="brand-name">Malaria Risk Advisor</span>
         </NavLink>
-        <div className="nav-right">
+
+        <button
+          className="hamburger-btn"
+          onClick={() => setMenuOpen((o) => !o)}
+          aria-label="Toggle menu"
+          aria-expanded={menuOpen}
+        >
+          {menuOpen ? "✕" : "☰"}
+        </button>
+
+        <div className={`nav-right ${menuOpen ? "nav-right-open" : ""}`}>
           <nav aria-label="Main navigation">
-            <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : "")}>
+            <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : "")} onClick={closeMenu}>
               {t("navHome")}
             </NavLink>
-            <NavLink to="/compare" className={({ isActive }) => (isActive ? "active" : "")}>
+            <NavLink to="/compare" className={({ isActive }) => (isActive ? "active" : "")} onClick={closeMenu}>
               {t("navCompare")}
             </NavLink>
             {isAuthenticated && (
-              <NavLink to="/watchlist" className={({ isActive }) => (isActive ? "active" : "")}>
+              <NavLink to="/watchlist" className={({ isActive }) => (isActive ? "active" : "")} onClick={closeMenu}>
                 Watchlist
               </NavLink>
             )}
-            <NavLink to="/about" className={({ isActive }) => (isActive ? "active" : "")}>
+            <NavLink to="/about" className={({ isActive }) => (isActive ? "active" : "")} onClick={closeMenu}>
               {t("navAbout")}
             </NavLink>
           </nav>
@@ -50,8 +65,8 @@ export default function Layout() {
             </div>
           ) : (
             <div className="auth-nav">
-              <NavLink to="/login" className="icon-btn">Log in</NavLink>
-              <NavLink to="/register" className="icon-btn icon-btn-accent">Register</NavLink>
+              <NavLink to="/login" className="icon-btn" onClick={closeMenu}>Log in</NavLink>
+              <NavLink to="/register" className="icon-btn icon-btn-accent" onClick={closeMenu}>Register</NavLink>
             </div>
           )}
 

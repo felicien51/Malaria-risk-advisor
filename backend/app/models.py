@@ -16,6 +16,12 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
 
+    # Password reset support. We store a hash of the reset token (never the
+    # raw token) plus its expiry, mirroring how passwords themselves are
+    # hashed — a DB leak shouldn't hand out usable reset links.
+    reset_token_hash = db.Column(db.String(255), nullable=True)
+    reset_token_expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
     watched_counties = db.relationship(
         "WatchedCounty", backref="user", cascade="all, delete-orphan", lazy=True
     )
@@ -25,6 +31,21 @@ class User(db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    def set_reset_token(self, token, expires_at):
+        self.reset_token_hash = generate_password_hash(token)
+        self.reset_token_expires_at = expires_at
+
+    def check_reset_token(self, token):
+        if not self.reset_token_hash or not self.reset_token_expires_at:
+            return False
+        if utcnow() > self.reset_token_expires_at:
+            return False
+        return check_password_hash(self.reset_token_hash, token)
+
+    def clear_reset_token(self):
+        self.reset_token_hash = None
+        self.reset_token_expires_at = None
 
     def to_dict(self):
         return {

@@ -22,3 +22,14 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
 
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+    FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+
+    # Flask-Limiter storage backend. In-memory is fine for a single dev/demo
+    # process; set RATELIMIT_STORAGE_URI to a shared Redis URL in production
+    # so limits are enforced consistently across multiple workers/dynos.
+    RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
+
+    # Password reset tokens are short-lived by design.
+    PASSWORD_RESET_TOKEN_EXPIRES_MINUTES = int(
+        os.environ.get("PASSWORD_RESET_TOKEN_EXPIRES_MINUTES", "30")
+    )

@@ -21,11 +21,16 @@ export function AuthProvider({ children }) {
         setUser(data);
         setStatus("ready");
       })
-      .catch(() => {
-        // Token expired or invalid — clear it silently.
-        localStorage.removeItem(TOKEN_KEY);
-        setToken(null);
-        setUser(null);
+      .catch((err) => {
+        // Only clear the session when the server actually rejected the
+        // token (expired/invalid). A network error (status 0) or a
+        // transient server issue shouldn't log the user out — keep the
+        // token around so a retry or reconnect can succeed.
+        if (err instanceof ApiError && (err.status === 401 || err.status === 422)) {
+          localStorage.removeItem(TOKEN_KEY);
+          setToken(null);
+          setUser(null);
+        }
         setStatus("ready");
       });
   }, [token]);

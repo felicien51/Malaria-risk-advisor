@@ -41,6 +41,9 @@ export const api = {
   register: (username, email, password) => request("/auth/register", { method: "POST", body: { username, email, password } }),
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
   me: (token) => request("/auth/me", { token }),
+  forgotPassword: (email) => request("/auth/forgot-password", { method: "POST", body: { email } }),
+  resetPassword: (email, token, password) =>
+    request("/auth/reset-password", { method: "POST", body: { email, token, password } }),
 
   getRisk: (countyName, token) => request(`/counties/${encodeURIComponent(countyName)}/risk`, { token }),
 

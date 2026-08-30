@@ -793,6 +793,48 @@ a.icon-btn {
   margin: 0.35rem 0 0;
 }
 
+.auth-card input[aria-invalid="true"] {
+  border-color: var(--risk-high);
+}
+
+.auth-password-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.auth-password-row input {
+  width: 100%;
+  padding-right: 3.2rem;
+}
+
+.auth-toggle-visibility {
+  position: absolute;
+  right: 0.6rem;
+  background: none;
+  border: none;
+  color: rgba(245, 239, 226, 0.55);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0.3rem 0.4rem;
+}
+
+.auth-toggle-visibility:hover {
+  color: var(--ochre-400);
+}
+
+.auth-forgot-link {
+  align-self: flex-end;
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: rgba(245, 239, 226, 0.55);
+  text-decoration: none;
+}
+
+.auth-forgot-link:hover {
+  color: var(--ochre-400);
+}
+
 .auth-error {
   margin-top: 0.85rem;
   padding: 0.65rem 0.85rem;
@@ -800,6 +842,16 @@ a.icon-btn {
   border: 1px solid rgba(193, 91, 58, 0.35);
   border-radius: 9px;
   color: var(--risk-high);
+  font-size: 0.82rem;
+}
+
+.auth-success {
+  margin-top: 0.85rem;
+  padding: 0.65rem 0.85rem;
+  background: rgba(94, 156, 94, 0.15);
+  border: 1px solid rgba(94, 156, 94, 0.35);
+  border-radius: 9px;
+  color: #7fbf7f;
   font-size: 0.82rem;
 }
 

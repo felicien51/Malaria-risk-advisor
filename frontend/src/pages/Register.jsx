@@ -2,13 +2,13 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { ApiError } from "../api/client";
-
-const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
+import { isValidUsername, isValidEmail, passwordError } from "../utils/validation";
 
 export default function Register() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const { register } = useAuth();
@@ -18,12 +18,17 @@ export default function Register() {
     e.preventDefault();
     setError(null);
 
-    if (!USERNAME_RE.test(username)) {
+    if (!isValidUsername(username)) {
       setError("Username must be 3-30 characters: letters, numbers, or underscores only.");
       return;
     }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+    if (!isValidEmail(email)) {
+      setError("Enter a valid email address.");
+      return;
+    }
+    const pwError = passwordError(password);
+    if (pwError) {
+      setError(pwError);
       return;
     }
 
@@ -40,7 +45,7 @@ export default function Register() {
 
   return (
     <div className="auth-page">
-      <form className="auth-card" onSubmit={handleSubmit}>
+      <form className="auth-card" onSubmit={handleSubmit} noValidate>
         <p className="hero-eyebrow">Get started</p>
         <h1 className="auth-title">Create an account</h1>
 
@@ -54,6 +59,10 @@ export default function Register() {
           minLength={3}
           maxLength={30}
           autoComplete="username"
+          autoFocus
+          disabled={submitting}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? "auth-error" : undefined}
         />
         <p className="auth-hint">3-30 characters: letters, numbers, underscores.</p>
 
@@ -65,21 +74,38 @@ export default function Register() {
           onChange={(e) => setEmail(e.target.value)}
           required
           autoComplete="email"
+          disabled={submitting}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? "auth-error" : undefined}
         />
 
         <label className="auth-label" htmlFor="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={8}
-          autoComplete="new-password"
-        />
+        <div className="auth-password-row">
+          <input
+            id="password"
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            autoComplete="new-password"
+            disabled={submitting}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? "auth-error" : undefined}
+          />
+          <button
+            type="button"
+            className="auth-toggle-visibility"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            tabIndex={-1}
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
         <p className="auth-hint">At least 8 characters.</p>
 
-        {error && <p className="auth-error" role="alert">{error}</p>}
+        {error && <p className="auth-error" role="alert" id="auth-error">{error}</p>}
 
         <button className="retry-btn auth-submit" type="submit" disabled={submitting}>
           {submitting ? "Creating account…" : "Create account"}

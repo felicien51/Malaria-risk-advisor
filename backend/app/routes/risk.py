@@ -21,7 +21,7 @@ def county_risk(county_name):
 
     try:
         weather = fetch_weather(county["lat"], county["lon"], past_days=14, forecast_days=16)
-        risk = compute_risk_score(weather)
+        risk = compute_risk_score(weather, past_days=14)
     except WeatherServiceError as exc:
         return jsonify({"error": str(exc)}), 502
 

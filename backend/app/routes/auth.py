@@ -13,6 +13,19 @@ auth_bp = Blueprint("auth", __name__)
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
 
+# Not exhaustive — just enough to block the handful of passwords that show
+# up at the top of every leaked-password frequency list, so length alone
+# doesn't wave through "password123"-style choices.
+COMMON_PASSWORDS = {
+    "password", "password1", "password123", "12345678", "123456789",
+    "1234567890", "qwerty123", "letmein1", "welcome1", "iloveyou1",
+    "admin1234", "abc123456", "football1", "monkey123", "dragon123",
+}
+
+
+def is_weak_password(password):
+    return password.lower() in COMMON_PASSWORDS
+
 # Generic response used for both the "email sent" and "email doesn't exist"
 # cases on /forgot-password, so an attacker can't use it to enumerate which
 # emails have accounts.
@@ -69,7 +82,7 @@ def send_password_reset_email(email, reset_link):
 def register():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
-    username = (data.get("username") or "").strip()
+    username = (data.get("username") or "").strip().lower()
     password = data.get("password") or ""
 
     if not email or not EMAIL_RE.match(email):
@@ -80,6 +93,8 @@ def register():
         }), 400
     if len(password) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if is_weak_password(password):
+        return jsonify({"error": "That password is too common. Please choose a stronger one"}), 400
 
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "An account with that email already exists"}), 409
@@ -91,7 +106,9 @@ def register():
     db.session.add(user)
     db.session.commit()
 
-    token = create_access_token(identity=str(user.id))
+    token = create_access_token(
+        identity=str(user.id), additional_claims={"token_version": user.token_version}
+    )
     return jsonify({"token": token, "user": user.to_dict()}), 201
 
 
@@ -106,7 +123,9 @@ def login():
     if not user or not user.check_password(password):
         return jsonify({"error": "Invalid email or password"}), 401
 
-    token = create_access_token(identity=str(user.id))
+    token = create_access_token(
+        identity=str(user.id), additional_claims={"token_version": user.token_version}
+    )
     return jsonify({"token": token, "user": user.to_dict()}), 200
 
 
@@ -122,6 +141,7 @@ def me():
 
 @auth_bp.patch("/me")
 @jwt_required()
+@limiter.limit("10 per minute")
 def update_me():
     """Lets an account set/change its username — mainly for legacy accounts
     created before the username field existed, which otherwise have no way
@@ -135,7 +155,7 @@ def update_me():
     if "username" not in data:
         return jsonify({"error": "Nothing to update"}), 400
 
-    username = (data.get("username") or "").strip()
+    username = (data.get("username") or "").strip().lower()
     if not username or not USERNAME_RE.match(username):
         return jsonify({
             "error": "Username must be 3-30 characters: letters, numbers, or underscores only"
@@ -148,6 +168,22 @@ def update_me():
     user.username = username
     db.session.commit()
     return jsonify(user.to_dict()), 200
+
+
+@auth_bp.post("/logout-everywhere")
+@jwt_required()
+def logout_everywhere():
+    """Invalidates every access token issued to this account so far —
+    including the one used to call this endpoint. Useful if a device is
+    lost or a session looks compromised but the password itself is fine."""
+    user_id = get_jwt_identity()
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user.revoke_all_tokens()
+    db.session.commit()
+    return jsonify({"message": "Logged out on all devices."}), 200
 
 
 @auth_bp.post("/forgot-password")
@@ -188,6 +224,8 @@ def reset_password():
         return jsonify({"error": "A reset token and email are required"}), 400
     if len(new_password) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if is_weak_password(new_password):
+        return jsonify({"error": "That password is too common. Please choose a stronger one"}), 400
 
     user = User.query.filter_by(email=email).first()
     if not user or not user.check_reset_token(token):

@@ -23,7 +23,7 @@ def client(app):
 def register_user(client):
     """Registers a user and returns (token, user_dict). Call with kwargs to
     override username/email/password."""
-    def _register(username="tester", email="tester@example.com", password="password123"):
+    def _register(username="tester", email="tester@example.com", password="testpass987"):
         resp = client.post(
             "/api/auth/register",
             json={"username": username, "email": email, "password": password},

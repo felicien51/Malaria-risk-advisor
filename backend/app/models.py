@@ -16,6 +16,14 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
 
+    # Bumped whenever the password changes (or the user explicitly logs out
+    # everywhere). Embedded as a claim in every access token issued; tokens
+    # carrying a stale version are rejected even though they haven't
+    # technically expired yet. This is what lets password-reset and
+    # logout-everywhere actually revoke sessions instead of just gating new
+    # logins.
+    token_version = db.Column(db.Integer, nullable=False, default=0)
+
     # Password reset support. We store a hash of the reset token (never the
     # raw token) plus its expiry, mirroring how passwords themselves are
     # hashed — a DB leak shouldn't hand out usable reset links.
@@ -28,9 +36,17 @@ class User(db.Model):
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
+        # Any token issued before this point should stop working immediately
+        # rather than riding out its remaining lifetime.
+        self.token_version = (self.token_version or 0) + 1
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    def revoke_all_tokens(self):
+        """Invalidates every access token issued so far, without touching
+        the password. Used for an explicit 'log out everywhere' action."""
+        self.token_version = (self.token_version or 0) + 1
 
     def set_reset_token(self, token, expires_at):
         self.reset_token_hash = generate_password_hash(token)

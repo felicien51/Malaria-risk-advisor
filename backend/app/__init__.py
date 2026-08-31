@@ -13,6 +13,20 @@ def create_app(config_object="config.Config"):
     limiter.init_app(app)
     CORS(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}}, supports_credentials=True)
 
+    from .models import User
+
+    @jwt.token_in_blocklist_loader
+    def check_token_version(jwt_header, jwt_payload):
+        """Rejects tokens issued before the user's last password change or
+        'log out everywhere' action, even if the token hasn't expired yet.
+        Named to match Flask-JWT-Extended's expected blocklist-callback
+        signature, but the check is version-based rather than a literal
+        denylist of token ids."""
+        user = db.session.get(User, jwt_payload["sub"])
+        if user is None:
+            return True
+        return jwt_payload.get("token_version") != user.token_version
+
     from .routes.auth import auth_bp
     from .routes.watchlist import watchlist_bp
     from .routes.risk import risk_bp

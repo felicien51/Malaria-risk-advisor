@@ -4,7 +4,8 @@ from datetime import timedelta
 
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from ..extensions import db, limiter
+from flask_mail import Message
+from ..extensions import db, limiter, mail
 from ..models import User, utcnow
 
 auth_bp = Blueprint("auth", __name__)
@@ -18,6 +19,36 @@ USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
 FORGOT_PASSWORD_GENERIC_MESSAGE = (
     "If an account exists for that email, a password reset link has been sent."
 )
+
+
+def send_password_reset_email(email, reset_link):
+    """Sends the reset link via Gmail SMTP if MAIL_USERNAME/MAIL_PASSWORD
+    are configured; otherwise logs it to the console so local dev keeps
+    working without SMTP set up. Any send failure is logged and swallowed —
+    forgot-password must still return its generic success response either
+    way, so it can't be used to probe whether email delivery is broken for
+    a particular address."""
+    if not current_app.config.get("MAIL_USERNAME") or not current_app.config.get("MAIL_PASSWORD"):
+        current_app.logger.info("Password reset link for %s: %s", email, reset_link)
+        return
+
+    try:
+        message = Message(
+            subject="Reset your Malaria Risk Advisor password",
+            recipients=[email],
+            body=(
+                "We received a request to reset your Malaria Risk Advisor password.\n\n"
+                f"Reset it here: {reset_link}\n\n"
+                "This link expires in "
+                f"{current_app.config.get('PASSWORD_RESET_TOKEN_EXPIRES_MINUTES', 30)} minutes. "
+                "If you didn't request this, you can safely ignore this email."
+            ),
+        )
+        mail.send(message)
+    except Exception:
+        # Don't leak SMTP failures to the client — log it and let the
+        # generic "if an account exists..." response go out regardless.
+        current_app.logger.exception("Failed to send password reset email to %s", email)
 
 
 @auth_bp.post("/register")
@@ -92,12 +123,11 @@ def forgot_password():
         user.set_reset_token(token, utcnow() + timedelta(minutes=expires_minutes))
         db.session.commit()
 
-        # NOTE: this project has no email/SMTP provider configured yet.
-        # In production, send `token` to the user's email instead of
-        # logging it — never return it in the API response, since that
-        # would let anyone reset any account's password.
+        # Emails via Gmail SMTP when MAIL_USERNAME/MAIL_PASSWORD are set;
+        # otherwise logs the link to the console (see
+        # send_password_reset_email above).
         reset_link = f"{current_app.config.get('FRONTEND_URL', '')}/reset-password?token={token}&email={email}"
-        current_app.logger.info("Password reset link for %s: %s", email, reset_link)
+        send_password_reset_email(email, reset_link)
 
     # Always return the same response whether or not the account exists.
     return jsonify({"message": FORGOT_PASSWORD_GENERIC_MESSAGE}), 200

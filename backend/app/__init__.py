@@ -1,6 +1,6 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
-from .extensions import db, migrate, jwt, limiter, mail
+from .extensions import db, migrate, jwt, limiter
 
 
 def create_app(config_object="config.Config"):
@@ -11,7 +11,6 @@ def create_app(config_object="config.Config"):
     migrate.init_app(app, db)
     jwt.init_app(app)
     limiter.init_app(app)
-    mail.init_app(app)
     CORS(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}}, supports_credentials=True)
 
     from .routes.auth import auth_bp

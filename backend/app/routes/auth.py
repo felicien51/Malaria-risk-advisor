@@ -2,10 +2,10 @@ import re
 import secrets
 from datetime import timedelta
 
+import requests
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from flask_mail import Message
-from ..extensions import db, limiter, mail
+from ..extensions import db, limiter
 from ..models import User, utcnow
 
 auth_bp = Blueprint("auth", __name__)
@@ -22,32 +22,45 @@ FORGOT_PASSWORD_GENERIC_MESSAGE = (
 
 
 def send_password_reset_email(email, reset_link):
-    """Sends the reset link via Gmail SMTP if MAIL_USERNAME/MAIL_PASSWORD
-    are configured; otherwise logs it to the console so local dev keeps
-    working without SMTP set up. Any send failure is logged and swallowed —
-    forgot-password must still return its generic success response either
-    way, so it can't be used to probe whether email delivery is broken for
-    a particular address."""
-    if not current_app.config.get("MAIL_USERNAME") or not current_app.config.get("MAIL_PASSWORD"):
+    """Sends the reset link via Brevo's transactional email HTTP API if
+    BREVO_API_KEY is configured; otherwise logs it to the console so local
+    dev keeps working without a Brevo account. Uses plain HTTPS rather than
+    SMTP because Render's free tier blocks outbound SMTP ports. Any send
+    failure is logged and swallowed — forgot-password must still return its
+    generic success response either way, so it can't be used to probe
+    whether email delivery is broken for a particular address."""
+    api_key = current_app.config.get("BREVO_API_KEY")
+    if not api_key:
         current_app.logger.info("Password reset link for %s: %s", email, reset_link)
         return
 
+    expires_minutes = current_app.config.get("PASSWORD_RESET_TOKEN_EXPIRES_MINUTES", 30)
+    payload = {
+        "sender": {
+            "name": current_app.config.get("BREVO_SENDER_NAME", "Malaria Risk Advisor"),
+            "email": current_app.config.get("BREVO_SENDER_EMAIL"),
+        },
+        "to": [{"email": email}],
+        "subject": "Reset your Malaria Risk Advisor password",
+        "textContent": (
+            "We received a request to reset your Malaria Risk Advisor password.\n\n"
+            f"Reset it here: {reset_link}\n\n"
+            f"This link expires in {expires_minutes} minutes. "
+            "If you didn't request this, you can safely ignore this email."
+        ),
+    }
+
     try:
-        message = Message(
-            subject="Reset your Malaria Risk Advisor password",
-            recipients=[email],
-            body=(
-                "We received a request to reset your Malaria Risk Advisor password.\n\n"
-                f"Reset it here: {reset_link}\n\n"
-                "This link expires in "
-                f"{current_app.config.get('PASSWORD_RESET_TOKEN_EXPIRES_MINUTES', 30)} minutes. "
-                "If you didn't request this, you can safely ignore this email."
-            ),
+        response = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            json=payload,
+            headers={"api-key": api_key, "Content-Type": "application/json", "Accept": "application/json"},
+            timeout=10,
         )
-        mail.send(message)
-    except Exception:
-        # Don't leak SMTP failures to the client — log it and let the
-        # generic "if an account exists..." response go out regardless.
+        response.raise_for_status()
+    except requests.RequestException:
+        # Don't leak email-provider failures to the client — log it and let
+        # the generic "if an account exists..." response go out regardless.
         current_app.logger.exception("Failed to send password reset email to %s", email)
 
 

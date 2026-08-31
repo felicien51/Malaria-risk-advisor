@@ -30,7 +30,7 @@ jobs:
           SECRET_KEY: ci-secret
           JWT_SECRET_KEY: ci-jwt-secret
           DATABASE_URL: sqlite:///ci.db
-        run: pytest tests/ -v
+        run: python -m pytest tests/ -v
 
   frontend-build:
     runs-on: ubuntu-latest

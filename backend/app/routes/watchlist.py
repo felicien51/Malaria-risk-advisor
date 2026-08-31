@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..extensions import db
-from ..models import WatchedCounty
+from ..models import WatchedCounty, RiskLog
 from ..counties import COUNTIES_BY_NAME
 
 watchlist_bp = Blueprint("watchlist", __name__)
@@ -92,5 +92,9 @@ def watchlist_history(watched_county_id):
     if not watched:
         return jsonify({"error": "Not found"}), 404
 
-    logs = sorted(watched.risk_logs, key=lambda r: r.recorded_at)
+    logs = (
+        RiskLog.query.filter_by(watched_county_id=watched.id)
+        .order_by(RiskLog.recorded_at)
+        .all()
+    )
     return jsonify([log.to_dict() for log in logs]), 200

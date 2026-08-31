@@ -45,3 +45,15 @@ class Config:
     PASSWORD_RESET_TOKEN_EXPIRES_MINUTES = int(
         os.environ.get("PASSWORD_RESET_TOKEN_EXPIRES_MINUTES", "30")
     )
+
+
+class TestConfig(Config):
+    """Used by the pytest suite (tests/conftest.py) — isolated in-memory
+    DB, rate limiting off so repeated test requests never trip the same
+    limits real users would hit, no outbound email calls."""
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    RATELIMIT_ENABLED = False
+    JWT_SECRET_KEY = "test-jwt-secret"
+    SECRET_KEY = "test-secret"
+    BREVO_API_KEY = None

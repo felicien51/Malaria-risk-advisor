@@ -114,9 +114,39 @@ def login():
 @jwt_required()
 def me():
     user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
+    return jsonify(user.to_dict()), 200
+
+
+@auth_bp.patch("/me")
+@jwt_required()
+def update_me():
+    """Lets an account set/change its username — mainly for legacy accounts
+    created before the username field existed, which otherwise have no way
+    to get one without a raw DB edit."""
+    user_id = get_jwt_identity()
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    if "username" not in data:
+        return jsonify({"error": "Nothing to update"}), 400
+
+    username = (data.get("username") or "").strip()
+    if not username or not USERNAME_RE.match(username):
+        return jsonify({
+            "error": "Username must be 3-30 characters: letters, numbers, or underscores only"
+        }), 400
+
+    existing = User.query.filter(User.username == username, User.id != user.id).first()
+    if existing:
+        return jsonify({"error": "That username is already taken"}), 409
+
+    user.username = username
+    db.session.commit()
     return jsonify(user.to_dict()), 200
 
 

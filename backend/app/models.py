@@ -39,7 +39,18 @@ class User(db.Model):
     def check_reset_token(self, token):
         if not self.reset_token_hash or not self.reset_token_expires_at:
             return False
-        if utcnow() > self.reset_token_expires_at:
+        expires_at = self.reset_token_expires_at
+        # SQLite (used for local dev per the README's no-Postgres fallback)
+        # doesn't actually persist timezone info on DateTime(timezone=True)
+        # columns — it comes back naive on read, even though it was written
+        # tz-aware. Comparing that against utcnow()'s aware datetime raises
+        # TypeError instead of just being wrong, so normalize to UTC first.
+        # PostgreSQL's timestamptz doesn't have this problem, but treating
+        # both backends the same way here is what makes local dev (SQLite)
+        # and production (Postgres) behave identically.
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if utcnow() > expires_at:
             return False
         return check_password_hash(self.reset_token_hash, token)
 

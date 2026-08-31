@@ -1,8 +1,8 @@
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from flask_jwt_extended.exceptions import NoAuthorizationError
-from ..extensions import db
-from ..models import WatchedCounty, RiskLog
+from ..extensions import db, limiter
+from ..models import WatchedCounty, RiskLog, utcnow
 from ..counties import COUNTIES_BY_NAME
 from ..weather_service import fetch_weather, compute_risk_score, WeatherServiceError
 
@@ -10,6 +10,7 @@ risk_bp = Blueprint("risk", __name__)
 
 
 @risk_bp.get("/counties/<county_name>/risk")
+@limiter.limit("30 per minute")
 def county_risk(county_name):
     """Public endpoint: anyone can check a county's current risk without an
     account, matching Phase 1 behavior. If the caller is logged in AND
@@ -36,15 +37,25 @@ def county_risk(county_name):
     if user_id:
         watched = WatchedCounty.query.filter_by(user_id=user_id, county_name=county_name).first()
         if watched:
-            log = RiskLog(
-                watched_county_id=watched.id,
-                score=risk["score"],
-                level=risk["level"],
-                rainfall=risk["rainfall"],
-                humidity=risk["humidity"],
-                temp=risk["temp"],
-            )
-            db.session.add(log)
-            db.session.commit()
+            # Cap history writes at once per calendar day per watched
+            # county — otherwise refreshing the dashboard repeatedly (or a
+            # user with many watched counties) fills RiskLog with rows that
+            # add no signal to the trend view.
+            today_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            already_logged_today = RiskLog.query.filter(
+                RiskLog.watched_county_id == watched.id,
+                RiskLog.recorded_at >= today_start,
+            ).first()
+            if not already_logged_today:
+                log = RiskLog(
+                    watched_county_id=watched.id,
+                    score=risk["score"],
+                    level=risk["level"],
+                    rainfall=risk["rainfall"],
+                    humidity=risk["humidity"],
+                    temp=risk["temp"],
+                )
+                db.session.add(log)
+                db.session.commit()
 
     return jsonify({"county_name": county_name, "risk": risk, "forecast": weather.get("daily", {})}), 200

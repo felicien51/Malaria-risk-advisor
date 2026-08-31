@@ -7,19 +7,40 @@ class ApiError extends Error {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithColdStartRetry(url, options) {
+  // Free-tier hosting (e.g. Render) spins the backend down after
+  // inactivity; the first request after that can take 30-60s to wake it,
+  // well past a normal fetch's patience. Retry once after a short pause
+  // before giving up, so a cold start doesn't look like the backend being
+  // down outright.
+  try {
+    return await fetch(url, options);
+  } catch {
+    await sleep(4000);
+    return await fetch(url, options);
+  }
+}
+
 async function request(path, { method = "GET", body, token, skipAuthHeader = false } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token && !skipAuthHeader) headers.Authorization = `Bearer ${token}`;
 
   let response;
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    response = await fetchWithColdStartRetry(`${API_BASE}${path}`, {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
-  } catch (err) {
-    throw new ApiError("Could not reach the server. Is the backend running?", 0);
+  } catch {
+    throw new ApiError(
+      "Could not reach the server. If this is the first request in a while, the backend may be waking up from a free-tier cold start — please try again in a moment.",
+      0
+    );
   }
 
   if (response.status === 204) return null;

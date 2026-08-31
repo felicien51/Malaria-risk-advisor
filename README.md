@@ -111,6 +111,13 @@ SECRET_KEY=<generate: python -c "import secrets; print(secrets.token_hex(32))">
 JWT_SECRET_KEY=<generate a different one the same way>
 DATABASE_URL=postgresql://localhost/malaria_risk_advisor
 CORS_ORIGINS=http://localhost:5173
+FRONTEND_URL=http://localhost:5173
+
+# Optional — password reset emails via Brevo's HTTP API. Without these,
+# forgot-password logs the reset link to the console instead of emailing
+# it, which is fine for local dev.
+BREVO_API_KEY=<from Brevo: SMTP & API > API Keys>
+BREVO_SENDER_EMAIL=<a sender verified in Brevo>
 ```
 
 No PostgreSQL installed locally? Use SQLite instead for development —
@@ -168,10 +175,13 @@ entries — this is what powers the trend/history view.
 
 | Method | Route | Auth | Description |
 |---|---|---|---|
-| POST | `/api/auth/register` | — | Create an account (email, username, password), returns a token |
-| POST | `/api/auth/login` | — | Log in, returns a token |
+| POST | `/api/auth/register` | — | Create an account (email, username, password), returns a token (rate-limited: 5/min) |
+| POST | `/api/auth/login` | — | Log in, returns a token (rate-limited: 5/min) |
 | GET | `/api/auth/me` | required | Current user's profile |
-| GET | `/api/counties/<name>/risk` | optional | Live risk for any county; logs to history if the caller has it watchlisted |
+| PATCH | `/api/auth/me` | required | Set/change username (mainly for legacy accounts without one) |
+| POST | `/api/auth/forgot-password` | — | Request a password reset email (rate-limited: 3/min) |
+| POST | `/api/auth/reset-password` | — | Complete a password reset with the emailed token |
+| GET | `/api/counties/<name>/risk` | optional | Live risk for any county; logs to history if the caller has it watchlisted (rate-limited: 30/min) |
 | GET | `/api/watchlist` | required | List the current user's watchlist |
 | POST | `/api/watchlist` | required | Add a county — body: `{ "county_name": "Kisumu" }` |
 | PATCH | `/api/watchlist/<id>` | required | Change the county on a watchlist entry |
@@ -183,6 +193,24 @@ All errors return JSON: `{"error": "..."}"`, with an appropriate status —
 `400` validation, `401` unauthenticated, `404` not found/not yours, `409`
 conflict (duplicate email/username/county), `502` weather service
 unreachable.
+
+---
+
+## Testing & CI
+
+Backend: `pytest`, covering auth (register/login/duplicate handling/token
+refresh flows) and risk-score computation — including a regression test
+for a bug where forecast days were incorrectly included in the trailing
+14-day average (see `backend/tests/test_risk_score.py`).
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the backend test suite
+and a frontend lint + build on every push and pull request to `main`.
 
 ---
 
@@ -220,6 +248,8 @@ finalized the most recent day or two).
   into a single settings menu, all persisted locally
 - Loading, error (with retry), and empty states throughout; an error
   boundary catches any unexpected render failure instead of a blank page
+- Forgot/reset password flow, emailed via Brevo's HTTP API (chosen over
+  SMTP because Render's free tier blocks outbound SMTP ports)
 
 ---
 
@@ -243,6 +273,10 @@ finalized the most recent day or two).
   a clinical or epidemiological model — see the in-app Methodology page
 - County coordinates point to each county's main town, not a precise
   centroid
+- Auth tokens are stored in `localStorage`, not an httpOnly cookie — an
+  XSS vulnerability could expose a token. Accepted tradeoff for this
+  project; an httpOnly-cookie approach would need CSRF protection in
+  exchange
 - Open-Meteo may rate-limit requests from Render's free-tier shared IP
   addresses more aggressively than from a residential IP — an
   infrastructure characteristic of free hosting, not an application bug
@@ -250,13 +284,23 @@ finalized the most recent day or two).
 - Swahili translation covers navigation and key headings, not every
   dynamic string
 - Accounts created before the username field existed have `username:
-  null` until they re-register
+  null` until they set one via the profile PATCH endpoint (no dedicated
+  settings-page UI for this yet — usable via the API directly)
+- Risk-history entries (`RiskLog`) are capped at one per watched county
+  per calendar day, so refreshing a dashboard repeatedly won't flood the
+  trend view — but this also means the very first check of a new day
+  always wins, even if conditions change later that day
+- No TypeScript/PropTypes — prop mismatches are caught at runtime (or not
+  at all) rather than at build time
 
 ---
 
 ## Roadmap
 
 Authentication landed in Phase 2 (moved up from the original Phase 3 plan
-to match the actual assignment requirements). Remaining ideas: rate
-limiting, refresh tokens, a profile-update endpoint for legacy accounts
-without a username, and general production hardening.
+to match the actual assignment requirements). Rate limiting, a
+forgot/reset password flow, and a backend test suite with CI have since
+landed too. Remaining ideas: refresh tokens, a dedicated profile-settings
+page (the username-update endpoint already exists, just no UI yet),
+pagination on the watchlist/history endpoints, and a TypeScript migration
+for the frontend.

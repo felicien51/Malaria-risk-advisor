@@ -30,10 +30,12 @@ def create_app(config_object="config.Config"):
     from .routes.auth import auth_bp
     from .routes.watchlist import watchlist_bp
     from .routes.risk import risk_bp
+    from .routes.chat import chat_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(watchlist_bp, url_prefix="/api/watchlist")
     app.register_blueprint(risk_bp, url_prefix="/api")
+    app.register_blueprint(chat_bp, url_prefix="/api/chat")
 
     register_error_handlers(app)
 

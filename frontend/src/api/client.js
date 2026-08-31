@@ -73,6 +73,13 @@ export const api = {
   updateWatchlistItem: (id, countyName, token) => request(`/watchlist/${id}`, { method: "PATCH", body: { county_name: countyName }, token }),
   removeFromWatchlist: (id, token) => request(`/watchlist/${id}`, { method: "DELETE", token }),
   watchlistHistory: (id, token) => request(`/watchlist/${id}/history`, { token }),
+
+  sendChatMessage: (message, { countyName, history, token } = {}) =>
+    request("/chat/message", {
+      method: "POST",
+      body: { message, county_name: countyName, history },
+      token,
+    }),
 };
 
 export { ApiError };

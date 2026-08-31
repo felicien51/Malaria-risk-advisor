@@ -46,6 +46,9 @@ export default function Layout() {
             <NavLink to="/compare" className={({ isActive }) => (isActive ? "active" : "")} onClick={closeMenu}>
               {t("navCompare")}
             </NavLink>
+            <NavLink to="/chat" className={({ isActive }) => (isActive ? "active" : "")} onClick={closeMenu}>
+              Ask AI
+            </NavLink>
             {isAuthenticated && (
               <NavLink to="/watchlist" className={({ isActive }) => (isActive ? "active" : "")} onClick={closeMenu}>
                 Watchlist

@@ -116,9 +116,12 @@ def send_message():
                 max_output_tokens=400,
             ),
         )
-    except APIError:
+    except APIError as exc:
+        # Logged server-side (visible in Render's Logs tab) so the real
+        # cause — bad key, model name, quota, disabled API — is visible
+        # even though the client only sees a generic message.
+        current_app.logger.error("Gemini API call failed: %s", exc)
         return jsonify({"error": "The chat assistant is temporarily unavailable. Please try again."}), 502
-
     reply = (response.text or "").strip()
     if not reply:
         return jsonify({"error": "The chat assistant is temporarily unavailable. Please try again."}), 502

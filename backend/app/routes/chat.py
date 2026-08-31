@@ -1,7 +1,9 @@
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 from flask_jwt_extended.exceptions import NoAuthorizationError
-import anthropic
+from google import genai
+from google.genai import types
+from google.genai.errors import APIError
 
 from ..extensions import limiter
 from ..counties import COUNTIES_BY_NAME
@@ -59,7 +61,7 @@ def _build_context_block(county_name):
 @chat_bp.post("/message")
 @limiter.limit("15 per minute")
 def send_message():
-    if not current_app.config.get("ANTHROPIC_API_KEY"):
+    if not current_app.config.get("GEMINI_API_KEY"):
         return jsonify({"error": "The chat assistant isn't configured on this server."}), 503
 
     data = request.get_json(silent=True) or {}
@@ -83,35 +85,41 @@ def send_message():
         pass
 
     # Only trust role/content from prior turns; cap length so a long-running
-    # conversation can't grow the request (and cost) without bound.
+    # conversation can't grow the request (and cost) without bound. Gemini
+    # uses "model" rather than "assistant" for the bot's turns, so the
+    # frontend's "assistant" role is translated here.
     trimmed_history = []
     for entry in history[-MAX_HISTORY_MESSAGES:]:
         if not isinstance(entry, dict):
             continue
         role = entry.get("role")
         content = str(entry.get("content") or "")[:MAX_MESSAGE_LENGTH]
-        if role in ("user", "assistant") and content:
-            trimmed_history.append({"role": role, "content": content})
+        if role == "user" and content:
+            trimmed_history.append({"role": "user", "parts": [{"text": content}]})
+        elif role == "assistant" and content:
+            trimmed_history.append({"role": "model", "parts": [{"text": content}]})
 
     system_prompt = SYSTEM_PROMPT
     context_block = _build_context_block(county_name)
     if context_block:
         system_prompt += f"\n\n{context_block}"
 
-    messages = trimmed_history + [{"role": "user", "content": message}]
+    contents = trimmed_history + [{"role": "user", "parts": [{"text": message}]}]
 
     try:
-        client = anthropic.Anthropic(api_key=current_app.config["ANTHROPIC_API_KEY"])
-        response = client.messages.create(
+        client = genai.Client(api_key=current_app.config["GEMINI_API_KEY"])
+        response = client.models.generate_content(
             model=current_app.config["CHAT_MODEL"],
-            max_tokens=400,
-            system=system_prompt,
-            messages=messages,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                max_output_tokens=400,
+            ),
         )
-    except anthropic.APIError:
+    except APIError:
         return jsonify({"error": "The chat assistant is temporarily unavailable. Please try again."}), 502
 
-    reply = "".join(block.text for block in response.content if block.type == "text").strip()
+    reply = (response.text or "").strip()
     if not reply:
         return jsonify({"error": "The chat assistant is temporarily unavailable. Please try again."}), 502
 

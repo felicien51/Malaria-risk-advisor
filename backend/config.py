@@ -46,11 +46,15 @@ class Config:
         os.environ.get("PASSWORD_RESET_TOKEN_EXPIRES_MINUTES", "30")
     )
 
-    # Chatbot (see app/routes/chat.py). Without this set, /api/chat/message
-    # returns a 503 rather than crashing, so the rest of the app keeps
-    # working even in environments where the chatbot hasn't been configured.
-    ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-    CHAT_MODEL = os.environ.get("CHAT_MODEL", "claude-sonnet-5")
+    # Chatbot (see app/routes/chat.py). Uses Google's Gemini API, which has
+    # a genuinely free tier (no card required) for the Flash models — see
+    # https://ai.google.dev/gemini-api/docs/rate-limits. Get a key at
+    # https://aistudio.google.com/apikey. Without this set,
+    # /api/chat/message returns a 503 rather than crashing, so the rest of
+    # the app keeps working even in environments where the chatbot hasn't
+    # been configured.
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+    CHAT_MODEL = os.environ.get("CHAT_MODEL", "gemini-2.5-flash")
 
 
 class TestConfig(Config):
@@ -63,4 +67,4 @@ class TestConfig(Config):
     JWT_SECRET_KEY = "test-jwt-secret"
     SECRET_KEY = "test-secret"
     BREVO_API_KEY = None
-    ANTHROPIC_API_KEY = None
+    GEMINI_API_KEY = None

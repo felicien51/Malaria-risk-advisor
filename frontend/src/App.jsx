@@ -12,6 +12,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Watchlist from "./pages/Watchlist";
 import Chat from "./pages/Chat";
+import Profile from "./pages/Profile";
 
 export default function App() {
   return (
@@ -32,6 +33,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Watchlist />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
             </ProtectedRoute>
           }
         />

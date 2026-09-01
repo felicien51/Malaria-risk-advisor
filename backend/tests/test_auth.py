@@ -6,6 +6,8 @@ def test_register_creates_account_and_returns_token(client):
     assert resp.status_code == 201
     body = resp.get_json()
     assert body["token"]
+    assert body["refresh_token"]
+    assert body["token"] != body["refresh_token"]
     assert body["user"]["username"] == "alice"
     assert body["user"]["email"] == "alice@example.com"
     # Password must never come back in the response.
@@ -53,7 +55,9 @@ def test_login_succeeds_with_correct_credentials(client, register_user):
         "/api/auth/login", json={"email": "carl@example.com", "password": "testpass987"}
     )
     assert resp.status_code == 200
-    assert resp.get_json()["token"]
+    body = resp.get_json()
+    assert body["token"]
+    assert body["refresh_token"]
 
 
 def test_login_rejects_wrong_password(client, register_user):
@@ -251,3 +255,78 @@ def test_login_after_logout_everywhere_issues_a_working_token(client, register_u
 
     resp = client.get("/api/auth/me", headers={"Authorization": f"Bearer {new_token}"})
     assert resp.status_code == 200
+
+
+def test_refresh_issues_a_working_new_access_token(client):
+    resp = client.post(
+        "/api/auth/register",
+        json={"username": "petra", "email": "petra@example.com", "password": "testpass987"},
+    )
+    refresh_token = resp.get_json()["refresh_token"]
+
+    resp = client.post(
+        "/api/auth/refresh", headers={"Authorization": f"Bearer {refresh_token}"}
+    )
+    assert resp.status_code == 200
+    new_access_token = resp.get_json()["token"]
+
+    resp = client.get("/api/auth/me", headers={"Authorization": f"Bearer {new_access_token}"})
+    assert resp.status_code == 200
+
+
+def test_refresh_endpoint_rejects_an_access_token(client, register_user):
+    """An access token must not work where a refresh token is expected —
+    otherwise the two would be interchangeable and the shorter access-token
+    lifetime would mean nothing."""
+    access_token, _ = register_user(email="quinn@example.com")
+
+    resp = client.post(
+        "/api/auth/refresh", headers={"Authorization": f"Bearer {access_token}"}
+    )
+    assert resp.status_code in (401, 422)
+
+
+def test_refresh_token_revoked_by_password_reset(client):
+    resp = client.post(
+        "/api/auth/register",
+        json={"username": "rosa", "email": "rosa@example.com", "password": "testpass987"},
+    )
+    refresh_token = resp.get_json()["refresh_token"]
+
+    from app.models import User, utcnow
+    from app.extensions import db
+    from datetime import timedelta
+    import secrets
+
+    with client.application.app_context():
+        user = User.query.filter_by(email="rosa@example.com").first()
+        reset_token = secrets.token_urlsafe(32)
+        user.set_reset_token(reset_token, utcnow() + timedelta(minutes=30))
+        db.session.commit()
+
+    client.post(
+        "/api/auth/reset-password",
+        json={"email": "rosa@example.com", "token": reset_token, "password": "newtestpass321"},
+    )
+
+    resp = client.post(
+        "/api/auth/refresh", headers={"Authorization": f"Bearer {refresh_token}"}
+    )
+    assert resp.status_code == 401
+
+
+def test_refresh_token_revoked_by_logout_everywhere(client):
+    resp = client.post(
+        "/api/auth/register",
+        json={"username": "sam", "email": "sam@example.com", "password": "testpass987"},
+    )
+    body = resp.get_json()
+    access_token = body["token"]
+    refresh_token = body["refresh_token"]
+
+    client.post("/api/auth/logout-everywhere", headers={"Authorization": f"Bearer {access_token}"})
+
+    resp = client.post(
+        "/api/auth/refresh", headers={"Authorization": f"Bearer {refresh_token}"}
+    )
+    assert resp.status_code == 401

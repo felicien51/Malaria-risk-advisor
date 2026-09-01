@@ -734,6 +734,12 @@ footer {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-decoration: none;
+}
+
+.auth-email:hover {
+  color: var(--ochre-400);
+  text-decoration: underline;
 }
 
 a.icon-btn {
@@ -1151,4 +1157,29 @@ html {
 .chat-input-row .retry-btn {
   margin-top: 0;
   white-space: nowrap;
+}
+
+/* Profile settings */
+.profile-danger-zone {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(var(--paper-rgb), 0.1);
+}
+
+.profile-danger-title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  margin: 0 0 0.4rem;
+}
+
+.profile-danger-copy {
+  font-size: 0.82rem;
+  color: rgba(var(--paper-rgb), 0.6);
+  margin: 0 0 0.85rem;
+  line-height: 1.5;
+}
+
+.profile-danger-btn {
+  border-color: var(--risk-high);
+  color: var(--risk-high);
 }

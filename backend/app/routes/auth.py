@@ -4,11 +4,29 @@ from datetime import timedelta
 
 import requests
 from flask import Blueprint, request, jsonify, current_app
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import (
+    create_access_token,
+    create_refresh_token,
+    jwt_required,
+    get_jwt_identity,
+)
 from ..extensions import db, limiter
 from ..models import User, utcnow
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def _issue_tokens(user):
+    """Access + refresh token pair for a freshly authenticated user. Both
+    embed token_version so the existing revocation check (see
+    app/__init__.py's token_in_blocklist_loader) covers refresh tokens the
+    same way it already covers access tokens — a password reset or
+    logout-everywhere invalidates both, not just the short-lived one."""
+    claims = {"token_version": user.token_version}
+    return {
+        "token": create_access_token(identity=str(user.id), additional_claims=claims),
+        "refresh_token": create_refresh_token(identity=str(user.id), additional_claims=claims),
+    }
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
@@ -106,10 +124,7 @@ def register():
     db.session.add(user)
     db.session.commit()
 
-    token = create_access_token(
-        identity=str(user.id), additional_claims={"token_version": user.token_version}
-    )
-    return jsonify({"token": token, "user": user.to_dict()}), 201
+    return jsonify({**_issue_tokens(user), "user": user.to_dict()}), 201
 
 
 @auth_bp.post("/login")
@@ -123,10 +138,7 @@ def login():
     if not user or not user.check_password(password):
         return jsonify({"error": "Invalid email or password"}), 401
 
-    token = create_access_token(
-        identity=str(user.id), additional_claims={"token_version": user.token_version}
-    )
-    return jsonify({"token": token, "user": user.to_dict()}), 200
+    return jsonify({**_issue_tokens(user), "user": user.to_dict()}), 200
 
 
 @auth_bp.get("/me")
@@ -168,6 +180,30 @@ def update_me():
     user.username = username
     db.session.commit()
     return jsonify(user.to_dict()), 200
+
+
+@auth_bp.post("/refresh")
+@jwt_required(refresh=True)
+@limiter.limit("30 per minute")
+def refresh():
+    """Exchanges a valid refresh token for a new access token. Only a
+    token created via create_refresh_token (type: "refresh") satisfies
+    @jwt_required(refresh=True) — an access token gets rejected here even
+    if it's otherwise valid, so the two can't be used interchangeably.
+    Looking token_version up fresh from the DB (rather than trusting the
+    refresh token's own claim) means a just-changed password is reflected
+    immediately in the new access token, even though the refresh token
+    itself was already re-validated against the current token_version by
+    the blocklist check before this handler ever runs."""
+    user_id = get_jwt_identity()
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    token = create_access_token(
+        identity=str(user.id), additional_claims={"token_version": user.token_version}
+    )
+    return jsonify({"token": token}), 200
 
 
 @auth_bp.post("/logout-everywhere")

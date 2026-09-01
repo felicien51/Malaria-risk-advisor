@@ -19,7 +19,13 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "dev-jwt-secret-change-me")
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
+    # Short-lived on purpose now that refresh tokens exist (see
+    # app/routes/auth.py POST /auth/refresh): a stolen access token is only
+    # useful for a few minutes, and the frontend silently exchanges the
+    # refresh token for a new one instead of the user needing to log in
+    # again every 15 minutes.
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
@@ -54,7 +60,7 @@ class Config:
     # the app keeps working even in environments where the chatbot hasn't
     # been configured.
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-    CHAT_MODEL = os.environ.get("CHAT_MODEL", "gemini-2.5-flash")
+    CHAT_MODEL = os.environ.get("CHAT_MODEL", "gemini-3.6-flash")
 
 
 class TestConfig(Config):

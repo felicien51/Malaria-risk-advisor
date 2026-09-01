@@ -760,10 +760,11 @@ a.icon-btn {
   max-width: 380px;
   background: var(--ink-900);
   border: 1px solid rgba(245, 239, 226, 0.1);
-  border-radius: 16px;
-  padding: 2rem;
+  border-radius: 20px;
+  padding: 2.25rem;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 24px 48px -20px rgba(0, 0, 0, 0.45);
 }
 
 .auth-title {
@@ -774,23 +775,40 @@ a.icon-btn {
 }
 
 .auth-label {
+  display: block;
   font-size: 0.8rem;
   color: rgba(245, 239, 226, 0.6);
-  margin: 0.75rem 0 0.35rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.auth-label:first-of-type {
+  margin-top: 0;
 }
 
 .auth-card input {
-  padding: 0.7rem 0.9rem;
-  border-radius: 10px;
-  border: 1px solid rgba(245, 239, 226, 0.14);
-  background: var(--ink-950);
+  padding: 0.75rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid rgba(245, 239, 226, 0.22);
+  background: rgba(245, 239, 226, 0.04);
   color: var(--paper);
   font-size: 0.95rem;
   outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.auth-card input:hover:not(:disabled) {
+  border-color: rgba(245, 239, 226, 0.32);
 }
 
 .auth-card input:focus {
   border-color: var(--ochre-500);
+  box-shadow: 0 0 0 3px rgba(201, 138, 44, 0.18);
+}
+
+.auth-card input:disabled {
+  background: rgba(245, 239, 226, 0.02);
+  border-color: rgba(245, 239, 226, 0.1);
+  color: rgba(245, 239, 226, 0.5);
 }
 
 .auth-hint {
@@ -862,13 +880,23 @@ a.icon-btn {
 }
 
 .auth-submit {
-  margin-top: 1.25rem;
+  margin-top: 1.5rem;
   width: 100%;
   text-align: center;
+  border-radius: 12px;
   background: var(--ochre-500);
   border-color: var(--ochre-500);
   color: var(--ink-950);
   font-weight: 500;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.auth-submit:hover:not(:disabled) {
+  background: var(--ochre-400);
+}
+
+.auth-submit:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .auth-submit:disabled {
@@ -877,7 +905,7 @@ a.icon-btn {
 }
 
 .auth-switch {
-  margin-top: 1.25rem;
+  margin-top: 1.5rem;
   text-align: center;
   font-size: 0.85rem;
   color: rgba(245, 239, 226, 0.55);
@@ -886,6 +914,10 @@ a.icon-btn {
 .auth-switch a {
   color: var(--ochre-400);
   text-decoration: none;
+}
+
+.auth-switch a:hover {
+  text-decoration: underline;
 }
 
 /* ---------- Watchlist page ---------- */
@@ -1162,24 +1194,32 @@ html {
 /* Profile settings */
 .profile-danger-zone {
   margin-top: 2rem;
-  padding-top: 1.25rem;
+  padding-top: 2rem;
   border-top: 1px solid rgba(var(--paper-rgb), 0.1);
 }
 
 .profile-danger-title {
   font-family: var(--font-display);
   font-size: 1rem;
-  margin: 0 0 0.4rem;
+  margin: 0 0 0.5rem;
 }
 
 .profile-danger-copy {
   font-size: 0.82rem;
   color: rgba(var(--paper-rgb), 0.6);
-  margin: 0 0 0.85rem;
+  margin: 0 0 1rem;
   line-height: 1.5;
 }
 
 .profile-danger-btn {
-  border-color: var(--risk-high);
-  color: var(--risk-high);
+  border-radius: 12px;
+  border-color: #c1493a;
+  color: #e0806f;
+  background: transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.profile-danger-btn:hover:not(:disabled) {
+  background: rgba(193, 73, 58, 0.12);
+  color: #e79587;
 }

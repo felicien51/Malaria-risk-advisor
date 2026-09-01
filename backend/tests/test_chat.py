@@ -70,7 +70,8 @@ def test_message_handles_upstream_api_error(app):
     app.config["GEMINI_API_KEY"] = "test-key"
     client = app.test_client()
 
-    with patch("app.routes.chat.requests.post", side_effect=requests.ConnectionError("boom")):
+    with patch("app.routes.chat.requests.post", side_effect=requests.ConnectionError("boom")), \
+         patch("app.routes.chat.time.sleep"):
         resp = client.post("/api/chat/message", json={"message": "Hello"})
 
     assert resp.status_code == 502
@@ -84,10 +85,29 @@ def test_message_handles_bad_status_from_gemini(app):
     mock_resp.raise_for_status.side_effect = requests.HTTPError("404 model not found")
     mock_resp.text = '{"error": {"code": 404, "message": "model not found"}}'
 
-    with patch("app.routes.chat.requests.post", return_value=mock_resp):
+    with patch("app.routes.chat.requests.post", return_value=mock_resp), \
+         patch("app.routes.chat.time.sleep"):
         resp = client.post("/api/chat/message", json={"message": "Hello"})
 
     assert resp.status_code == 502
+
+
+def test_message_retries_once_after_transient_failure(app):
+    """A 503 ('high demand') or timeout on the first attempt shouldn't
+    surface to the user if the retry succeeds — this is the whole point
+    of the retry helper."""
+    app.config["GEMINI_API_KEY"] = "test-key"
+    client = app.test_client()
+
+    with patch(
+        "app.routes.chat.requests.post",
+        side_effect=[requests.Timeout("slow"), _fake_gemini_response()],
+    ) as mock_post, patch("app.routes.chat.time.sleep") as mock_sleep:
+        resp = client.post("/api/chat/message", json={"message": "Hello"})
+
+    assert resp.status_code == 200
+    assert mock_post.call_count == 2
+    mock_sleep.assert_called_once()
 
 
 def test_message_trims_history_and_ignores_bad_entries(app):

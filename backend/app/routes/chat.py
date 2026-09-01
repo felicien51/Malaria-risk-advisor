@@ -1,3 +1,5 @@
+import time
+
 import requests
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
@@ -15,6 +17,32 @@ chat_bp = Blueprint("chat", __name__)
 # and getting the worker OOM-killed. `requests` is already a dependency
 # (used for weather data), so this adds no extra memory cost.
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+
+REQUEST_TIMEOUT_SECONDS = 30
+RETRY_BACKOFF_SECONDS = 2
+
+
+def _post_to_gemini(url, params, payload):
+    """POSTs to Gemini with one retry on failure. Google's free-tier
+    models occasionally return a transient 503 ("currently experiencing
+    high demand") or a slow response that times out — both usually clear
+    within a couple of seconds, so one retry avoids surfacing a false
+    failure to the user for something that would have worked a moment
+    later. Two attempts at REQUEST_TIMEOUT_SECONDS each, plus the backoff,
+    stay comfortably under gunicorn's worker timeout (see
+    gunicorn.conf.py)."""
+    last_exc = None
+    for attempt in range(2):
+        try:
+            resp = requests.post(url, params=params, json=payload, timeout=REQUEST_TIMEOUT_SECONDS)
+            resp.raise_for_status()
+            return resp
+        except requests.RequestException as exc:
+            last_exc = exc
+            if attempt == 0:
+                time.sleep(RETRY_BACKOFF_SECONDS)
+    raise last_exc
+
 
 # Kept short and topic-scoped on purpose: this isn't meant to be a general
 # assistant, just a focused explainer for the numbers this app already
@@ -127,21 +155,20 @@ def send_message():
     }
 
     try:
-        resp = requests.post(
-            url,
-            params={"key": current_app.config["GEMINI_API_KEY"]},
-            json=payload,
-            timeout=60,
+        resp = _post_to_gemini(
+            url, {"key": current_app.config["GEMINI_API_KEY"]}, payload
         )
-        resp.raise_for_status()
-        data = resp.json()
-        reply = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        result = resp.json()
+        reply = result["candidates"][0]["content"]["parts"][0]["text"].strip()
     except (requests.RequestException, KeyError, IndexError) as exc:
         # Logged server-side (visible in Render's Logs tab) so the real
-        # cause — bad key, model name, quota, disabled API — is visible
-        # even though the client only sees a generic message.
-        detail = resp.text[:500] if "resp" in locals() else str(exc)
-        current_app.logger.error("Gemini API call failed: %s", detail)
+        # cause — bad key, model name, quota, overload, timeout — is
+        # visible even though the client only sees a generic message.
+        if isinstance(exc, requests.HTTPError) and exc.response is not None:
+            detail = exc.response.text[:500]
+        else:
+            detail = str(exc)
+        current_app.logger.error("Gemini API call failed (after retry): %s", detail)
         return jsonify({"error": "The chat assistant is temporarily unavailable. Please try again."}), 502
 
     if not reply:

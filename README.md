@@ -69,7 +69,7 @@ over time.
 ├── backend/                 Flask + PostgreSQL API
 │   ├── app/
 │   │   ├── models.py             User, WatchedCounty, RiskLog
-│   │   ├── routes/                auth.py, watchlist.py, risk.py
+│   │   ├── routes/                auth.py, watchlist.py, risk.py, chat.py
 │   │   ├── weather_service.py     Open-Meteo client + risk scoring
 │   │   │                          (mirrors frontend/src/utils/riskScore.js)
 │   │   ├── counties.py            same 47 counties, backend copy
@@ -77,6 +77,7 @@ over time.
 │   │   └── __init__.py            app factory
 │   ├── migrations/                Flask-Migrate history
 │   ├── config.py
+│   ├── gunicorn.conf.py           single worker + raised timeout (see Deployment)
 │   ├── wsgi.py
 │   ├── requirements.txt
 │   └── .env.example
@@ -118,6 +119,12 @@ FRONTEND_URL=http://localhost:5173
 # it, which is fine for local dev.
 BREVO_API_KEY=<from Brevo: SMTP & API > API Keys>
 BREVO_SENDER_EMAIL=<a sender verified in Brevo>
+
+# Optional — powers the in-app chat assistant (see Chat assistant below).
+# Without this, /api/chat/message returns 503 rather than erroring, so
+# the rest of the app works fine without it.
+GEMINI_API_KEY=<free key from https://aistudio.google.com/apikey>
+CHAT_MODEL=gemini-3.6-flash
 ```
 
 No PostgreSQL installed locally? Use SQLite instead for development —
@@ -150,17 +157,30 @@ plain `404`, never a leaked "forbidden" that would confirm the record
 exists.
 
 Registration requires an **email**, a **username** (3–30 characters:
-letters, numbers, underscores; must be unique), and a **password** (8+
-characters). The username is what's shown in the app's nav instead of the
-email. Accounts created before this field existed show their email as a
-fallback until they re-register or a profile-update endpoint is added.
+letters, numbers, underscores; must be unique, stored lowercase), and a
+**password** (8+ characters, checked against a small common-password
+blocklist so `password123`-style choices are rejected). The username is
+what's shown in the app's nav instead of the email. Accounts created
+before this field existed show their email as a fallback until they
+re-register or a profile-update endpoint is added.
+
+**Token revocation.** Every access token embeds the user's `token_version`
+as a claim; a server-side check on every authenticated request rejects
+any token whose version doesn't match the user's current one in the
+database. `set_password()` bumps this version automatically, so
+completing a password reset invalidates every token issued before it —
+not just future logins — even though JWTs are normally stateless and
+can't otherwise be revoked before they expire. `POST
+/api/auth/logout-everywhere` bumps it on demand for an explicit "log out
+on all devices" action, without changing the password.
 
 ---
 
 ## Data model
 
 **User** — id, email (unique), username (unique, nullable for
-pre-existing accounts), password_hash, created_at.
+pre-existing accounts), password_hash, token_version (bumped on password
+change or logout-everywhere; see Authentication above), created_at.
 
 **WatchedCounty** — id, user_id (FK → User), county_name, lat, lon,
 created_at. One row per user per county (unique constraint on the pair).
@@ -180,28 +200,34 @@ entries — this is what powers the trend/history view.
 | GET | `/api/auth/me` | required | Current user's profile |
 | PATCH | `/api/auth/me` | required | Set/change username (mainly for legacy accounts without one) |
 | POST | `/api/auth/forgot-password` | — | Request a password reset email (rate-limited: 3/min) |
-| POST | `/api/auth/reset-password` | — | Complete a password reset with the emailed token |
+| POST | `/api/auth/reset-password` | — | Complete a password reset with the emailed token; invalidates all prior tokens |
+| POST | `/api/auth/logout-everywhere` | required | Invalidate every access token issued to this account |
 | GET | `/api/counties/<name>/risk` | optional | Live risk for any county; logs to history if the caller has it watchlisted (rate-limited: 30/min) |
 | GET | `/api/watchlist` | required | List the current user's watchlist |
 | POST | `/api/watchlist` | required | Add a county — body: `{ "county_name": "Kisumu" }` |
 | PATCH | `/api/watchlist/<id>` | required | Change the county on a watchlist entry |
 | DELETE | `/api/watchlist/<id>` | required | Remove a watchlist entry |
 | GET | `/api/watchlist/<id>/history` | required | Full risk history for one watched county |
+| POST | `/api/chat/message` | optional | Ask the chat assistant a malaria risk/prevention question (rate-limited: 15/min) — see Chat assistant below |
 | GET | `/api/health` | — | Liveness check |
 
 All errors return JSON: `{"error": "..."}"`, with an appropriate status —
 `400` validation, `401` unauthenticated, `404` not found/not yours, `409`
-conflict (duplicate email/username/county), `502` weather service
-unreachable.
+conflict (duplicate email/username/county), `502` weather service or chat
+assistant unreachable, `503` chat assistant not configured (no
+`GEMINI_API_KEY` set).
 
 ---
 
 ## Testing & CI
 
 Backend: `pytest`, covering auth (register/login/duplicate handling/token
-refresh flows) and risk-score computation — including a regression test
-for a bug where forecast days were incorrectly included in the trailing
-14-day average (see `backend/tests/test_risk_score.py`).
+revocation on password reset and logout-everywhere), the chat endpoint
+(mocked Gemini responses — success, transient-failure retry, permanent
+failure, history trimming), and risk-score computation — including a
+regression test for a bug where forecast days were incorrectly included
+in the trailing 14-day average (see `backend/tests/test_risk_score.py`).
+36 tests total.
 
 ```bash
 cd backend
@@ -234,6 +260,40 @@ finalized the most recent day or two).
 
 ---
 
+## Chat assistant
+
+A dedicated `/chat` page lets anyone ask a malaria risk/prevention
+question, optionally scoped to a specific county — if one is selected,
+the backend fetches that county's live weather/risk data (the same call
+`weather_service.py` makes for the dashboard) and passes it to the model
+as context, so an answer like "why is my risk moderate?" lines up with
+what's on screen.
+
+**Model:** Google's Gemini (`CHAT_MODEL`, default `gemini-3.6-flash`),
+called via a plain REST `POST` (`app/routes/chat.py`) rather than the
+`google-genai` SDK. The SDK pulls in `grpc`/`pydantic`/`httpx`/
+`websockets`, which pushed the app's memory footprint over Render's
+free-tier 512MB limit and got the worker OOM-killed; `requests` is
+already a dependency (used for weather data), so calling the REST
+endpoint directly adds no extra memory cost.
+
+**Reliability:** one automatic retry with backoff on a transient failure
+(a 503 "currently experiencing high demand" from Gemini's free tier, or a
+slow response that times out), since both usually clear within a couple
+of seconds. `gunicorn.conf.py` raises the worker timeout (and pins to a
+single worker/multi-thread process) so a slower Gemini response — or the
+retry itself — doesn't get killed mid-request.
+
+**Scope and safety:** the system prompt keeps answers limited to
+malaria risk/prevention topics, explicitly defers medical
+diagnosis/treatment questions to a healthcare provider, and asks for
+plain text (no markdown) to match the chat bubble's rendering. The
+endpoint works for anonymous visitors — no account required, matching the
+rest of the app's "check without logging in" philosophy — and is
+rate-limited (15/min) since each call has a real cost.
+
+---
+
 ## Features
 
 - Search or browse all 47 counties; no account required to check risk
@@ -250,6 +310,11 @@ finalized the most recent day or two).
   boundary catches any unexpected render failure instead of a blank page
 - Forgot/reset password flow, emailed via Brevo's HTTP API (chosen over
   SMTP because Render's free tier blocks outbound SMTP ports)
+- Password reset and an explicit "log out everywhere" both invalidate
+  every previously issued access token, not just future logins
+- AI chat assistant (Google Gemini) for malaria risk/prevention
+  questions, optionally grounded in a specific county's live risk data —
+  no account required
 
 ---
 
@@ -263,7 +328,13 @@ finalized the most recent day or two).
 - **Backend:** Render, root directory set to `backend`. Build command runs
   `pip install -r requirements.txt && flask db upgrade`, so every deploy
   migrates the database automatically. Connected to a Render-managed
-  PostgreSQL instance via `DATABASE_URL`.
+  PostgreSQL instance via `DATABASE_URL`. `gunicorn.conf.py` pins a single
+  worker with a raised timeout — Render's free tier gives ~512MB RAM, and
+  the default worker timeout (30s) was too short for a slower chat
+  response; both are read automatically by gunicorn without needing
+  anything in Render's Start Command field. `GEMINI_API_KEY` (and
+  optionally `CHAT_MODEL`) must be set as an environment variable on
+  Render for the chat assistant to work in production.
 
 ---
 
@@ -292,6 +363,12 @@ finalized the most recent day or two).
   always wins, even if conditions change later that day
 - No TypeScript/PropTypes — prop mismatches are caught at runtime (or not
   at all) rather than at build time
+- The chat assistant depends on Gemini's free tier, which occasionally
+  returns a transient "high demand" error under load; one retry is built
+  in, but a second consecutive failure still surfaces to the user
+- Render's free-tier instance spins down after inactivity, so the first
+  request after a period of idle time (chat or otherwise) can take 30–60
+  seconds to wake up
 
 ---
 
@@ -299,8 +376,10 @@ finalized the most recent day or two).
 
 Authentication landed in Phase 2 (moved up from the original Phase 3 plan
 to match the actual assignment requirements). Rate limiting, a
-forgot/reset password flow, and a backend test suite with CI have since
-landed too. Remaining ideas: refresh tokens, a dedicated profile-settings
-page (the username-update endpoint already exists, just no UI yet),
-pagination on the watchlist/history endpoints, and a TypeScript migration
-for the frontend.
+forgot/reset password flow, a backend test suite with CI, token
+revocation on password reset/logout-everywhere, and an AI chat assistant
+have since landed too. Remaining ideas: refresh tokens, a dedicated
+profile-settings page (the username-update endpoint already exists, just
+no UI yet), pagination on the watchlist/history endpoints, streaming chat
+responses instead of waiting for the full reply, and a TypeScript
+migration for the frontend.

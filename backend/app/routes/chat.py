@@ -131,7 +131,7 @@ def send_message():
             url,
             params={"key": current_app.config["GEMINI_API_KEY"]},
             json=payload,
-            timeout=20,
+            timeout=60,
         )
         resp.raise_for_status()
         data = resp.json()

@@ -35,7 +35,9 @@ Stay within that scope. If asked something unrelated to malaria risk or preventi
 that's outside what you can help with here. You are not a doctor: for symptoms, diagnosis, \
 or treatment decisions, tell the person to see a healthcare provider or contact local health \
 services. Keep answers brief (a few sentences to a short paragraph) and avoid repeating the \
-raw numbers back verbatim if they're already shown on screen — interpret them instead."""
+raw numbers back verbatim if they're already shown on screen — interpret them instead. \
+Write in plain text only: no markdown (no asterisks, headers, or bullet symbols), since the \
+chat interface displays your reply as-is."""
 
 MAX_HISTORY_MESSAGES = 8
 MAX_MESSAGE_LENGTH = 1000
@@ -115,7 +117,14 @@ def send_message():
     payload = {
         "contents": contents,
         "systemInstruction": {"parts": [{"text": system_prompt}]},
-        "generationConfig": {"maxOutputTokens": 400},
+        "generationConfig": {
+            "maxOutputTokens": 800,
+            # Gemini 3.x models spend part of maxOutputTokens on internal
+            # "thinking" before producing the visible answer, which was
+            # silently truncating short chatbot replies. Disabled since
+            # this endpoint only needs brief, direct answers.
+            "thinkingConfig": {"thinkingBudget": 0},
+        },
     }
 
     try:

@@ -1,15 +1,20 @@
+import requests
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 from flask_jwt_extended.exceptions import NoAuthorizationError
-from google import genai
-from google.genai import types
-from google.genai.errors import APIError
 
 from ..extensions import limiter
 from ..counties import COUNTIES_BY_NAME
 from ..weather_service import fetch_weather, compute_risk_score, WeatherServiceError
 
 chat_bp = Blueprint("chat", __name__)
+
+# Talking to Gemini's plain REST endpoint rather than the google-genai SDK
+# on purpose: the SDK pulls in grpc/pydantic/httpx/websockets, which was
+# pushing this app's memory footprint over Render's free-tier 512MB limit
+# and getting the worker OOM-killed. `requests` is already a dependency
+# (used for weather data), so this adds no extra memory cost.
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 # Kept short and topic-scoped on purpose: this isn't meant to be a general
 # assistant, just a focused explainer for the numbers this app already
@@ -106,23 +111,31 @@ def send_message():
 
     contents = trimmed_history + [{"role": "user", "parts": [{"text": message}]}]
 
+    url = f"{GEMINI_API_BASE}/{current_app.config['CHAT_MODEL']}:generateContent"
+    payload = {
+        "contents": contents,
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "generationConfig": {"maxOutputTokens": 400},
+    }
+
     try:
-        client = genai.Client(api_key=current_app.config["GEMINI_API_KEY"])
-        response = client.models.generate_content(
-            model=current_app.config["CHAT_MODEL"],
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                max_output_tokens=400,
-            ),
+        resp = requests.post(
+            url,
+            params={"key": current_app.config["GEMINI_API_KEY"]},
+            json=payload,
+            timeout=20,
         )
-    except APIError as exc:
+        resp.raise_for_status()
+        data = resp.json()
+        reply = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except (requests.RequestException, KeyError, IndexError) as exc:
         # Logged server-side (visible in Render's Logs tab) so the real
         # cause — bad key, model name, quota, disabled API — is visible
         # even though the client only sees a generic message.
-        current_app.logger.error("Gemini API call failed: %s", exc)
+        detail = resp.text[:500] if "resp" in locals() else str(exc)
+        current_app.logger.error("Gemini API call failed: %s", detail)
         return jsonify({"error": "The chat assistant is temporarily unavailable. Please try again."}), 502
-    reply = (response.text or "").strip()
+
     if not reply:
         return jsonify({"error": "The chat assistant is temporarily unavailable. Please try again."}), 502
 

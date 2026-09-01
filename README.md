@@ -52,7 +52,7 @@ over time.
 ├── frontend/               React (Vite) app
 │   ├── src/
 │   │   ├── pages/              Home, Dashboard, Forecast, Compare,
-│   │   │                       Watchlist, Login, Register, About
+│   │   │                       Watchlist, Profile, Login, Register, About
 │   │   ├── components/         RiskGauge, ForecastChart, Layout,
 │   │   │                       SettingsMenu, ProtectedRoute, ErrorBoundary
 │   │   ├── context/            AuthContext, PreferencesContext, LanguageContext
@@ -144,8 +144,9 @@ npm run dev                     # runs on http://localhost:5173
 
 ## Authentication & ownership
 
-JWT-based, via Flask-JWT-Extended. Registering or logging in returns a
-token; the frontend attaches it as `Authorization: Bearer <token>` on
+JWT-based, via Flask-JWT-Extended, with a short-lived access token plus a
+longer-lived refresh token. Registering or logging in returns both; the
+frontend attaches the access token as `Authorization: Bearer <token>` on
 every request that needs it. Checking a county's current risk doesn't
 require an account — that stays open, matching Phase 1's behavior. Saving
 a county to a personal watchlist does require one.
@@ -160,19 +161,33 @@ Registration requires an **email**, a **username** (3–30 characters:
 letters, numbers, underscores; must be unique, stored lowercase), and a
 **password** (8+ characters, checked against a small common-password
 blocklist so `password123`-style choices are rejected). The username is
-what's shown in the app's nav instead of the email. Accounts created
-before this field existed show their email as a fallback until they
-re-register or a profile-update endpoint is added.
+what's shown in the app's nav instead of the email, and can be changed
+later from the **Profile settings** page (`/profile`). Accounts created
+before this field existed show their email as a fallback until they set
+one.
 
-**Token revocation.** Every access token embeds the user's `token_version`
-as a claim; a server-side check on every authenticated request rejects
-any token whose version doesn't match the user's current one in the
-database. `set_password()` bumps this version automatically, so
-completing a password reset invalidates every token issued before it —
-not just future logins — even though JWTs are normally stateless and
-can't otherwise be revoked before they expire. `POST
-/api/auth/logout-everywhere` bumps it on demand for an explicit "log out
-on all devices" action, without changing the password.
+**Access + refresh tokens.** Access tokens expire after 15 minutes —
+short enough that a stolen one is only useful briefly. Rather than
+forcing a re-login every 15 minutes, the frontend's API client (see
+`frontend/src/api/client.js`) catches a `401` on an authenticated
+request, silently exchanges the refresh token (30-day lifetime) for a
+new access token via `POST /api/auth/refresh`, and retries the original
+request once — the user never sees an interruption. Concurrent requests
+that all hit a `401` around the same time share a single in-flight
+refresh instead of each triggering their own. If the refresh token
+itself is invalid or expired, the retry fails too and the user is signed
+out normally.
+
+**Token revocation.** Every access *and* refresh token embeds the user's
+`token_version` as a claim; a server-side check on every authenticated
+request rejects any token whose version doesn't match the user's current
+one in the database. `set_password()` bumps this version automatically,
+so completing a password reset invalidates every token issued before
+it — both access and refresh, not just future logins — even though JWTs
+are normally stateless and can't otherwise be revoked before they
+expire. `POST /api/auth/logout-everywhere` bumps it on demand for an
+explicit "log out on all devices" action (also available as a button on
+the Profile settings page), without changing the password.
 
 ---
 
@@ -180,7 +195,8 @@ on all devices" action, without changing the password.
 
 **User** — id, email (unique), username (unique, nullable for
 pre-existing accounts), password_hash, token_version (bumped on password
-change or logout-everywhere; see Authentication above), created_at.
+change or logout-everywhere; invalidates outstanding access and refresh
+tokens alike — see Authentication above), created_at.
 
 **WatchedCounty** — id, user_id (FK → User), county_name, lat, lon,
 created_at. One row per user per county (unique constraint on the pair).
@@ -195,13 +211,14 @@ entries — this is what powers the trend/history view.
 
 | Method | Route | Auth | Description |
 |---|---|---|---|
-| POST | `/api/auth/register` | — | Create an account (email, username, password), returns a token (rate-limited: 5/min) |
-| POST | `/api/auth/login` | — | Log in, returns a token (rate-limited: 5/min) |
+| POST | `/api/auth/register` | — | Create an account (email, username, password), returns an access + refresh token pair (rate-limited: 5/min) |
+| POST | `/api/auth/login` | — | Log in, returns an access + refresh token pair (rate-limited: 5/min) |
 | GET | `/api/auth/me` | required | Current user's profile |
-| PATCH | `/api/auth/me` | required | Set/change username (mainly for legacy accounts without one) |
+| PATCH | `/api/auth/me` | required | Set/change username — powers the Profile settings page |
+| POST | `/api/auth/refresh` | refresh token | Exchange a refresh token for a new access token (rate-limited: 30/min) |
 | POST | `/api/auth/forgot-password` | — | Request a password reset email (rate-limited: 3/min) |
-| POST | `/api/auth/reset-password` | — | Complete a password reset with the emailed token; invalidates all prior tokens |
-| POST | `/api/auth/logout-everywhere` | required | Invalidate every access token issued to this account |
+| POST | `/api/auth/reset-password` | — | Complete a password reset with the emailed token; invalidates all prior access *and* refresh tokens |
+| POST | `/api/auth/logout-everywhere` | required | Invalidate every access and refresh token issued to this account |
 | GET | `/api/counties/<name>/risk` | optional | Live risk for any county; logs to history if the caller has it watchlisted (rate-limited: 30/min) |
 | GET | `/api/watchlist` | required | List the current user's watchlist |
 | POST | `/api/watchlist` | required | Add a county — body: `{ "county_name": "Kisumu" }` |
@@ -221,13 +238,15 @@ assistant unreachable, `503` chat assistant not configured (no
 
 ## Testing & CI
 
-Backend: `pytest`, covering auth (register/login/duplicate handling/token
-revocation on password reset and logout-everywhere), the chat endpoint
-(mocked Gemini responses — success, transient-failure retry, permanent
-failure, history trimming), and risk-score computation — including a
-regression test for a bug where forecast days were incorrectly included
-in the trailing 14-day average (see `backend/tests/test_risk_score.py`).
-36 tests total.
+Backend: `pytest`, covering auth (register/login/duplicate handling,
+access+refresh token issuance, the refresh endpoint correctly rejecting
+an access token in place of a refresh token, and token revocation on
+password reset and logout-everywhere covering both token types), the
+chat endpoint (mocked Gemini responses — success, transient-failure
+retry, permanent failure, history trimming), and risk-score computation —
+including a regression test for a bug where forecast days were
+incorrectly included in the trailing 14-day average (see
+`backend/tests/test_risk_score.py`). 40 tests total.
 
 ```bash
 cd backend
@@ -311,7 +330,13 @@ rate-limited (15/min) since each call has a real cost.
 - Forgot/reset password flow, emailed via Brevo's HTTP API (chosen over
   SMTP because Render's free tier blocks outbound SMTP ports)
 - Password reset and an explicit "log out everywhere" both invalidate
-  every previously issued access token, not just future logins
+  every previously issued access *and* refresh token, not just future
+  logins
+- Short-lived (15 min) access tokens with a 30-day refresh token behind
+  the scenes; the API client silently renews an expired access token and
+  retries, so a session just keeps working without an interruption
+- Profile settings page (`/profile`) — change your username, see your
+  email, log out on all devices
 - AI chat assistant (Google Gemini) for malaria risk/prevention
   questions, optionally grounded in a specific county's live risk data —
   no account required
@@ -344,19 +369,16 @@ rate-limited (15/min) since each call has a real cost.
   a clinical or epidemiological model — see the in-app Methodology page
 - County coordinates point to each county's main town, not a precise
   centroid
-- Auth tokens are stored in `localStorage`, not an httpOnly cookie — an
-  XSS vulnerability could expose a token. Accepted tradeoff for this
-  project; an httpOnly-cookie approach would need CSRF protection in
-  exchange
+- Auth tokens (both access and refresh) are stored in `localStorage`, not
+  an httpOnly cookie — an XSS vulnerability could expose either. Accepted
+  tradeoff for this project; an httpOnly-cookie approach would need CSRF
+  protection in exchange
 - Open-Meteo may rate-limit requests from Render's free-tier shared IP
   addresses more aggressively than from a residential IP — an
   infrastructure characteristic of free hosting, not an application bug
 - Browser notifications only fire while the tab is open (no push server)
 - Swahili translation covers navigation and key headings, not every
   dynamic string
-- Accounts created before the username field existed have `username:
-  null` until they set one via the profile PATCH endpoint (no dedicated
-  settings-page UI for this yet — usable via the API directly)
 - Risk-history entries (`RiskLog`) are capped at one per watched county
   per calendar day, so refreshing a dashboard repeatedly won't flood the
   trend view — but this also means the very first check of a new day
@@ -377,9 +399,11 @@ rate-limited (15/min) since each call has a real cost.
 Authentication landed in Phase 2 (moved up from the original Phase 3 plan
 to match the actual assignment requirements). Rate limiting, a
 forgot/reset password flow, a backend test suite with CI, token
-revocation on password reset/logout-everywhere, and an AI chat assistant
-have since landed too. Remaining ideas: refresh tokens, a dedicated
-profile-settings page (the username-update endpoint already exists, just
-no UI yet), pagination on the watchlist/history endpoints, streaming chat
-responses instead of waiting for the full reply, and a TypeScript
-migration for the frontend.
+revocation on password reset/logout-everywhere, an AI chat assistant,
+short-lived access tokens backed by refresh tokens, and a profile
+settings page have since landed too. Remaining ideas: pagination on the
+watchlist/history endpoints, streaming chat responses instead of waiting
+for the full reply, refresh token rotation with theft detection (current
+refresh tokens are long-lived and revoked only in bulk via
+`logout-everywhere`, not individually), and a TypeScript migration for
+the frontend.

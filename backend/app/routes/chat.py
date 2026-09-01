@@ -117,14 +117,13 @@ def send_message():
     payload = {
         "contents": contents,
         "systemInstruction": {"parts": [{"text": system_prompt}]},
-        "generationConfig": {
-            "maxOutputTokens": 800,
-            # Gemini 3.x models spend part of maxOutputTokens on internal
-            # "thinking" before producing the visible answer, which was
-            # silently truncating short chatbot replies. Disabled since
-            # this endpoint only needs brief, direct answers.
-            "thinkingConfig": {"thinkingBudget": 0},
-        },
+        # 1500 rather than a tighter number: Gemini 3.x models spend part
+        # of this budget on internal "thinking" before the visible answer,
+        # which was silently truncating short replies at 400. Passing
+        # thinkingConfig to disable that outright caused a 400
+        # INVALID_ARGUMENT on this model, so a bigger ceiling is used
+        # instead of trying to turn thinking off.
+        "generationConfig": {"maxOutputTokens": 1500},
     }
 
     try:

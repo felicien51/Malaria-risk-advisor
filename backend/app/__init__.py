@@ -31,11 +31,15 @@ def create_app(config_object="config.Config"):
     from .routes.watchlist import watchlist_bp
     from .routes.risk import risk_bp
     from .routes.chat import chat_bp
+    from .routes.admin import admin_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(watchlist_bp, url_prefix="/api/watchlist")
     app.register_blueprint(risk_bp, url_prefix="/api")
     app.register_blueprint(chat_bp, url_prefix="/api/chat")
+    app.register_blueprint(admin_bp, url_prefix="/api/admin")
+
+    register_cli(app)
 
     register_error_handlers(app)
 
@@ -44,6 +48,29 @@ def create_app(config_object="config.Config"):
         return jsonify({"status": "ok"})
 
     return app
+
+
+def register_cli(app):
+    import click
+
+    @app.cli.command("make-admin")
+    @click.argument("email")
+    def make_admin(email):
+        """Promote an existing user to admin by email.
+        Usage: flask make-admin someone@example.com
+        """
+        from .models import User
+        from .extensions import db
+
+        email = email.strip().lower()
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            print(f"No user found with email {email}")
+            return
+
+        user.is_admin = True
+        db.session.commit()
+        print(f"{email} is now an admin.")
 
 
 def register_error_handlers(app):

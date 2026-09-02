@@ -14,6 +14,7 @@ class User(db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     username = db.Column(db.String(50), unique=True, nullable=True, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
+    is_admin = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
 
     # Bumped whenever the password changes (or the user explicitly logs out
@@ -79,6 +80,7 @@ class User(db.Model):
             "id": self.id,
             "email": self.email,
             "username": self.username,
+            "is_admin": self.is_admin,
             "created_at": self.created_at.isoformat(),
         }
 
